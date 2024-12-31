@@ -1,0 +1,123 @@
+$isDesktop: 1800px;
+$isTablet: 1400px;
+$isMobile: 1000px;
+$isTiny: 800px;
+
+.slider__parent:not(:hover) {
+  .slide-button {
+    display: none;
+  }
+}
+
+.slide-button {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  margin: 20px 0 40px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  &:hover {
+    //background: rgba(0, 0, 0, 0.3);
+  }
+
+  &--next {
+    right: 0;
+
+    span {
+      transform: rotateZ(-90deg);
+    }
+  }
+
+  &--prev {
+    left: 0;
+
+    span {
+      transform: rotateZ(90deg);
+    }
+  }
+}
+
+.slider {
+  display: flex;
+  position: relative;
+
+  &__container {
+    display: flex;
+    padding: 0 80px;
+    transition: transform 300ms ease 100ms;
+    z-index: 4;
+    width: 100%;
+    overflow: visible;
+  }
+
+  .item {
+    z-index: 1;
+    flex: 0 0 calc(100% / 6 - (10px));
+    transition: transform 300ms ease 100ms;
+    margin: 0 5px;
+
+    &[data-first="true"]:hover {
+      transform: translateX(10%) scale(1.2);
+    }
+
+    &[data-last="true"]:hover {
+      transform: translateX(-10%) scale(1.2);
+    }
+
+    &:hover {
+      transform: scale(1.2);
+    }
+
+    &:hover {
+      z-index: 5;
+      transition: transform 300ms ease 200ms, z-index 0s step-end 0.2s;
+
+      & * {
+        z-index: 10;
+      }
+    }
+
+    &:not(:hover) {
+      z-index: 1;
+      transition: transform 300ms ease, z-index 0.2s step-end;
+    }
+  }
+}
+
+@media screen and (max-width: $isDesktop) {
+  .slider {
+    .item {
+      flex: 0 0 calc(100% / 5 - (8px));
+    }
+  }
+}
+
+@media screen and (max-width: $isTablet) {
+  .slider {
+    .item {
+      flex: 0 0 calc(100% / 4 - (8px));
+    }
+  }
+}
+
+@media screen and (max-width: $isMobile) {
+  .slider {
+    .item {
+      flex: 0 0 calc(100% / 3 - (8px));
+    }
+  }
+}
+
+@media screen and (max-width: $isTiny) {
+  .slider {
+    .item {
+      flex: 0 0 calc(100% / 2 - (8px));
+    }
+  }
+}
