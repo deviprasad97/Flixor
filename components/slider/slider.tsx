@@ -1,4 +1,4 @@
-import { FC } from "react";
+import { FC, useState } from "react";
 import { useSliding } from "@/components/slider/use-sliding";
 import { useIsSize } from "@/hooks/use-is-size";
 import {
@@ -231,13 +231,25 @@ export const Slider: FC<{
                       <span>Play</span>
                     </button>
                   </ContextMenuItem>
-                  <ContextMenuItem className="flex flex-row gap-2" asChild>
+                  <ContextMenuItem 
+                    className="flex flex-row gap-2" 
+                    asChild 
+                    disabled={Boolean((item.type === "show" && item.leafCount === item.viewedLeafCount) ||
+                             (item.type === "movie" && item.viewCount && item.viewCount > 0))}
+                  >
                     <button
                       type="button"
                       className="w-full"
                       onClick={() => {
                         ServerApi.scrobble({ key: mid }).then((success) => {
-                          if (success) onUpdate(item);
+                          if (success) {
+                            if (item.type === "movie") {
+                              item.viewCount = item.viewCount ? item.viewCount + 1 : 1;
+                            } else if (item.type === "show") {
+                              item.viewedLeafCount = item.leafCount;
+                            }
+                            onUpdate(item);
+                          }
                         });
                       }}
                     >
@@ -245,13 +257,25 @@ export const Slider: FC<{
                       <span>Mark as Watched</span>
                     </button>
                   </ContextMenuItem>
-                  <ContextMenuItem className="flex flex-row gap-2" asChild>
+                  <ContextMenuItem 
+                    className="flex flex-row gap-2" 
+                    asChild 
+                    disabled={!Boolean((item.type === "show" && item.leafCount === item.viewedLeafCount) ||
+                             (item.type === "movie" && item.viewCount && item.viewCount > 0))}
+                  >
                     <button
                       type="button"
                       className="w-full"
                       onClick={() => {
                         ServerApi.unscrobble({ key: mid }).then((success) => {
-                          if (success) onUpdate(item);
+                          if (success) {
+                            if (item.type === "movie") {
+                              item.viewCount = item.viewCount ? item.viewCount - 1 : 0;
+                            } else if (item.type === "show") {
+                              item.viewedLeafCount = 0;
+                            }
+                            onUpdate(item);
+                          }
                         });
                       }}
                     >

@@ -114,6 +114,15 @@ export const VideoView = forwardRef<
                 router.push(`${pathname}?mid=${mid}`, { scroll: false });
               }
             }}>
+            {((item.type === "show" && item.leafCount === item.viewedLeafCount) ||
+              (item.type === "movie" && viewCount && viewCount > 0)) && (
+              <div className="absolute top-0 px-4 pt-4 w-full max-w-full flex flex-row items-center justify-end gap-2">
+                <span className="lg:group-hover:opacity-100 opacity-0 font-bold uppercase duration-300 ease-in-out transition text-xs">
+                  watched
+                </span>
+                <CircleCheck />
+              </div>
+            )}
             {(item.type === "episode" || item.type === "movie") && <button
               className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300"
               onClick={(e) => {
