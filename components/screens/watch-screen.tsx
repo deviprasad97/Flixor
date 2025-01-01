@@ -25,6 +25,8 @@ import {
   Volume1,
   Volume2,
   VolumeX,
+  RotateCcw,
+  RotateCw,
 } from "lucide-react";
 import {
   Select,
@@ -595,6 +597,30 @@ export const WatchScreen: FC<{ watch: string | undefined }> = ({ watch }) => {
                   />
                 )}
               </button>
+              <button
+                onClick={() => {
+                  if (!player.current) return;
+                  player.current.seekTo(player.current.getCurrentTime() - 10);
+                }}
+                className="relative"
+              >
+                <div className="hover:scale-125 hover:text-primary transition duration-75">
+                  <RotateCcw className="w-8 h-8 text-muted-foreground" />
+                  <span className="absolute inset-0 flex items-center justify-center text-muted-foreground hover:text-primary text-xs">10</span>
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  if (!player.current) return;
+                  player.current.seekTo(player.current.getCurrentTime() + 10);
+                }}
+                className="relative"
+              >
+                <div className="hover:scale-125 hover:text-primary transition duration-75">
+                  <RotateCw className="w-8 h-8 text-muted-foreground" />
+                  <span className="absolute inset-0 flex items-center justify-center text-muted-foreground hover:text-primary text-xs">10</span>
+                </div>
+              </button>
               <div className="flex-1" />
               <p className="font-bold select-none">
                 {metadata.type === "movie" && metadata.title}
@@ -662,195 +688,180 @@ export const WatchScreen: FC<{ watch: string | undefined }> = ({ watch }) => {
                   </Tooltip>
                 </TooltipProvider>
               )}
-              <Dialog>
-                <DialogTrigger>
+              <Popover>
+                <PopoverTrigger>
                   <SlidersHorizontal className="w-8 h-8 text-muted-foreground hover:scale-125 hover:text-primary transition duration-75" />
-                </DialogTrigger>
-                <DialogContent className="m-4 flex flex-col gap-2">
-                  <VisuallyHidden>
-                    <DialogTitle>Playback Settings</DialogTitle>
-                  </VisuallyHidden>
-                  {videoOptions.length > 0 && (
-                    <>
-                      <Label>Video</Label>
-                      <Select
-                        value={quality.bitrate?.toString()}
-                        defaultValue={quality.bitrate?.toString()}
-                        onValueChange={async (bitrate) => {
-                          const selected = videoOptions.find(
-                            (q) => q.bitrate?.toString() === bitrate,
-                          )!;
+                </PopoverTrigger>
+                <PopoverContent className="w-[300px] p-4">
+                  <div className="flex flex-col gap-4">
+                    {videoOptions.length > 0 && (
+                      <div className="space-y-2">
+                        <Label>Video Quality</Label>
+                        <Select
+                          value={quality.bitrate?.toString()}
+                          defaultValue={quality.bitrate?.toString()}
+                          onValueChange={async (bitrate) => {
+                            const selected = videoOptions.find(
+                              (q) => q.bitrate?.toString() === bitrate,
+                            )!;
 
-                          await loadMetadata(watch);
-                          setIsLoadingMetadata(true);
-                          await ServerApi.decision({
-                            id: watch,
-                            limitation: {
-                              maxVideoBitrate: selected.bitrate,
-                              autoAdjustQuality: quality.auto,
-                            },
-                          });
-                          setIsLoadingMetadata(false);
+                            await loadMetadata(watch);
+                            setIsLoadingMetadata(true);
+                            await ServerApi.decision({
+                              id: watch,
+                              limitation: {
+                                maxVideoBitrate: selected.bitrate,
+                                autoAdjustQuality: quality.auto,
+                              },
+                            });
+                            setIsLoadingMetadata(false);
 
-                          setQuality({
-                            bitrate: selected.original
-                              ? undefined
-                              : selected.bitrate,
-                            auto: undefined,
-                          });
+                            setQuality({
+                              bitrate: selected.original
+                                ? undefined
+                                : selected.bitrate,
+                              auto: undefined,
+                            });
 
-                          if (selected.original) {
-                            localStorage.removeItem("quality");
-                          } else if (selected.bitrate) {
-                            localStorage.setItem(
-                              "quality",
-                              selected.bitrate.toString(),
-                            );
-                          }
+                            if (selected.original) {
+                              localStorage.removeItem("quality");
+                            } else if (selected.bitrate) {
+                              localStorage.setItem(
+                                "quality",
+                                selected.bitrate.toString(),
+                              );
+                            }
 
-                          const progress =
-                            player.current?.getCurrentTime() ?? 0;
+                            const progress =
+                              player.current?.getCurrentTime() ?? 0;
 
-                          if (!seekToAfterLoad.current) {
-                            seekToAfterLoad.current = progress;
-                          }
-                          setUrl("");
-                          setNextUrl(loaded());
-                        }}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Choose a video quality" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {videoOptions.map((option) => (
-                            <SelectItem
-                              value={option.bitrate!.toString()}
-                              key={option.bitrate!}
-                            >
-                              {option.title}{" "}
-                              <span className="font-bold">{option.extra}</span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </>
-                  )}
-                  {audioOptions.length > 0 && (
-                    <>
-                      <Label>Audio</Label>
-                      <Select
-                        value={
-                          audioOptions
-                            .find((opt) => opt.selected)
-                            ?.id?.toString() ?? ""
-                        }
-                        defaultValue={
-                          audioOptions
-                            .find((opt) => opt.selected)
-                            ?.id?.toString() ?? ""
-                        }
-                        onValueChange={async (stream) => {
-                          await ServerApi.audio({
-                            part: metadata?.Media
-                              ? metadata?.Media[0].Part[0].id.toString()
-                              : "",
-                            stream: stream,
-                          });
-                          await loadMetadata(watch);
-                          await ServerApi.decision({
-                            id: watch,
-                            limitation: {
-                              maxVideoBitrate: quality.bitrate,
-                              autoAdjustQuality: quality.auto,
-                            },
-                          });
+                            if (!seekToAfterLoad.current) {
+                              seekToAfterLoad.current = progress;
+                            }
+                            setUrl("");
+                            setNextUrl(loaded());
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Choose a video quality" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {videoOptions.map((option) => (
+                              <SelectItem
+                                value={option.bitrate!.toString()}
+                                key={option.bitrate!}
+                              >
+                                {option.title}{" "}
+                                <span className="font-bold">{option.extra}</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
-                          const progress =
-                            player.current?.getCurrentTime() ?? 0;
+                    {audioOptions.length > 0 && (
+                      <div className="space-y-2">
+                        <Label>Audio Track</Label>
+                        <Select
+                          value={audioOptions.find((opt) => opt.selected)?.id?.toString() ?? ""}
+                          defaultValue={audioOptions.find((opt) => opt.selected)?.id?.toString() ?? ""}
+                          onValueChange={async (stream) => {
+                            await ServerApi.audio({
+                              part: metadata?.Media
+                                ? metadata?.Media[0].Part[0].id.toString()
+                                : "",
+                              stream: stream,
+                            });
+                            await loadMetadata(watch);
+                            await ServerApi.decision({
+                              id: watch,
+                              limitation: {
+                                maxVideoBitrate: quality.bitrate,
+                                autoAdjustQuality: quality.auto,
+                              },
+                            });
 
-                          if (!seekToAfterLoad.current) {
-                            seekToAfterLoad.current = progress;
-                          }
-                          setUrl("");
-                          setNextUrl(loaded());
-                        }}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Choose an audio" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {audioOptions.map((option) => (
-                            <SelectItem
-                              value={option.id.toString()}
-                              key={option.id}
-                            >
-                              {option.extendedDisplayTitle}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </>
-                  )}
-                  {subtitleOptions.length > 0 && (
-                    <>
-                      <Label>Subtitle</Label>
-                      <Select
-                        value={
-                          subtitleOptions
-                            .find((opt) => opt.selected)
-                            ?.id?.toString() ?? "0"
-                        }
-                        defaultValue={
-                          subtitleOptions
-                            .find((opt) => opt.selected)
-                            ?.id?.toString() ?? "0"
-                        }
-                        onValueChange={async (stream) => {
-                          await ServerApi.subtitle({
-                            part: metadata?.Media
-                              ? metadata?.Media[0].Part[0].id.toString()
-                              : "",
-                            stream: stream,
-                          });
-                          await loadMetadata(watch);
-                          await ServerApi.decision({
-                            id: watch,
-                            limitation: {
-                              maxVideoBitrate: quality.bitrate,
-                              autoAdjustQuality: quality.auto,
-                            },
-                          });
+                            const progress =
+                              player.current?.getCurrentTime() ?? 0;
 
-                          const progress =
-                            player.current?.getCurrentTime() ?? 0;
+                            if (!seekToAfterLoad.current) {
+                              seekToAfterLoad.current = progress;
+                            }
+                            setUrl("");
+                            setNextUrl(loaded());
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Choose an audio track" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {audioOptions.map((option) => (
+                              <SelectItem
+                                value={option.id.toString()}
+                                key={option.id}
+                              >
+                                {option.extendedDisplayTitle}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
-                          if (!seekToAfterLoad.current) {
-                            seekToAfterLoad.current = progress;
-                          }
+                    {subtitleOptions.length > 0 && (
+                      <div className="space-y-2">
+                        <Label>Subtitles</Label>
+                        <Select
+                          value={subtitleOptions.find((opt) => opt.selected)?.id?.toString() ?? "0"}
+                          defaultValue={subtitleOptions.find((opt) => opt.selected)?.id?.toString() ?? "0"}
+                          onValueChange={async (stream) => {
+                            await ServerApi.subtitle({
+                              part: metadata?.Media
+                                ? metadata?.Media[0].Part[0].id.toString()
+                                : "",
+                              stream: stream,
+                            });
+                            await loadMetadata(watch);
+                            await ServerApi.decision({
+                              id: watch,
+                              limitation: {
+                                maxVideoBitrate: quality.bitrate,
+                                autoAdjustQuality: quality.auto,
+                              },
+                            });
 
-                          setUrl("");
-                          setNextUrl(loaded());
-                        }}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Choose an subtitle" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="0">None</SelectItem>
-                          {subtitleOptions.map((option) => (
-                            <SelectItem
-                              value={option.id.toString()}
-                              key={option.id}
-                            >
-                              {option.extendedDisplayTitle}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </>
-                  )}
-                </DialogContent>
-              </Dialog>
+                            const progress =
+                              player.current?.getCurrentTime() ?? 0;
+
+                            if (!seekToAfterLoad.current) {
+                              seekToAfterLoad.current = progress;
+                            }
+
+                            setUrl("");
+                            setNextUrl(loaded());
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Choose subtitles" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">Off</SelectItem>
+                            {subtitleOptions.map((option) => (
+                              <SelectItem
+                                value={option.id.toString()}
+                                key={option.id}
+                              >
+                                {option.extendedDisplayTitle}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
               <Popover
                 open={openVolume && showControls}
                 onOpenChange={(open) => setOpenVolume(open)}
