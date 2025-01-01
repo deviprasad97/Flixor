@@ -1,4 +1,7 @@
-FROM node:20-bookworm-slim as builder
+# Author: Flixor
+# App Name: Flixor
+
+FROM node:20-bookworm-slim
 
 WORKDIR /app
 
@@ -11,6 +14,7 @@ RUN pnpm install
 
 COPY . .
 
+# Build the application
 RUN pnpm run build
 
 EXPOSE 3000
