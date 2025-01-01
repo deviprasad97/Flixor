@@ -1,4 +1,4 @@
-# Project Name
+# Flixor
 
 This project is a fork of [Plexy](https://github.com/ricoloic/plexy) at commit `859ec9343920601d41069f1d6da15bf6cc335096`, which itself was forked from [PerPlexed](https://github.com/Ipmake/PerPlexed). It aims to provide an alternative web UI for the Plex app, inspired by Netflix's user interface.
 

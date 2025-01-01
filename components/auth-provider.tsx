@@ -12,12 +12,45 @@ import { Api } from "@/api";
 import { PLEX } from "@/constants";
 import axios from "axios";
 
-const LibrariesContext = createContext({ libraries: [] } as {
+const LibrariesContext = createContext({ 
+  libraries: [],
+  servers: [],
+  currentServer: null,
+  setCurrentServer: () => {},
+} as {
   libraries: Plex.LibarySection[];
+  servers: Array<{ name: string; uri: string }>;
+  currentServer: { name: string; uri: string } | null;
+  setCurrentServer: (server: { name: string; uri: string }) => void;
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [libraries, setLibraries] = useState<Plex.LibarySection[]>([]);
+  const [servers, setServers] = useState<Array<{ name: string; uri: string }>>([]);
+  const [currentServer, setCurrentServer] = useState<{ name: string; uri: string } | null>(null);
+
+  const handleServerChange = async (server: { name: string; uri: string }) => {
+    try {
+      const { data } = await axios.get<{ MediaContainer: { Directory: Plex.LibarySection[] } }>(
+        `${server.uri}/library/sections`,
+        {
+          headers: {
+            "X-Plex-Token": localStorage.getItem("token") as string,
+            accept: "application/json",
+          },
+        }
+      );
+      
+      if (data) {
+        localStorage.setItem("server", server.uri);
+        localStorage.setItem("server-name", server.name);
+        setCurrentServer(server);
+        setLibraries(data.MediaContainer.Directory);
+      }
+    } catch (err) {
+      console.error("Failed to load libraries for server:", err);
+    }
+  };
 
   useEffect(() => {
     let pin = localStorage.getItem("pin");
@@ -82,51 +115,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return;
           }
 
-          // Create an array of promises for each connection
-          const promises = res2.data[0].connections.map((connection) => {
-            return new Promise((resolve, reject) => {
-              axios
-                .get<{ MediaContainer: { Directory: Plex.LibarySection[] } }>(
+          // Store all available servers
+          const availableServers = res2.data.map(server => ({
+            name: server.name,
+            connections: server.connections
+          })).filter(server => server.connections && server.connections.length > 0);
+
+          // Test each server's connection and store working ones
+          const workingServers: Array<{ name: string; uri: string }> = [];
+
+          for (const server of availableServers) {
+            for (const connection of server.connections) {
+              try {
+                const response = await axios.get<{ MediaContainer: { Directory: Plex.LibarySection[] } }>(
                   `${connection.uri}/library/sections`,
                   {
                     headers: {
                       "X-Plex-Token": localStorage.getItem("token") as string,
                       accept: "application/json",
                     },
-                  },
-                )
-                .then(({ data }) => {
-                  if (data) {
-                    resolve({
-                      data: data.MediaContainer.Directory,
-                      uri: connection.uri,
-                    });
-                  } else {
-                    setTimeout(() => {
-                      reject(
-                        new Error("Call failed for url: " + connection.uri),
-                      );
-                    }, 60_000);
                   }
-                })
-                .catch((err) => {
-                  console.error(err);
-                  setTimeout(() => {
-                    reject(new Error("Call failed for url: " + connection.uri));
-                  }, 60_000);
-                });
-            });
-          });
+                );
 
-          // Use Promise.race to stop as soon as we find a valid server
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-expect-error
-          const result: { data: Plex.LibarySection[]; uri: string } =
-            await Promise.race(promises);
+                if (response.data) {
+                  workingServers.push({
+                    name: server.name,
+                    uri: connection.uri
+                  });
+                  break; // Found a working connection for this server
+                }
+              } catch (err) {
+                console.error(`Connection failed for ${server.name}:`, err);
+                continue;
+              }
+            }
+          }
 
-          if (result) {
-            localStorage.setItem("server", result.uri);
-            setLibraries(result.data);
+          setServers(workingServers);
+
+          // Set current server (either from localStorage or first available)
+          const savedServerUri = localStorage.getItem("server");
+          const savedServerName = localStorage.getItem("server-name");
+          const initialServer = savedServerUri && savedServerName
+            ? { uri: savedServerUri, name: savedServerName }
+            : workingServers[0];
+
+          if (initialServer) {
+            await handleServerChange(initialServer);
           } else {
             localStorage.removeItem("token");
             window.location.href = "/";
@@ -163,7 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   if (libraries.length === 0) return null;
 
   return (
-    <LibrariesContext.Provider value={{ libraries }}>
+    <LibrariesContext.Provider value={{ libraries, servers, currentServer, setCurrentServer: handleServerChange }}>
       {children}
     </LibrariesContext.Provider>
   );

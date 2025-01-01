@@ -9,6 +9,16 @@ import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { Search } from "@/components/search";
 import { useLibraries } from "@/components/auth-provider";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ServerIcon } from "lucide-react";
 
 const HeadLink: FC<{
   children: ReactNode;
@@ -28,7 +38,16 @@ const HeadLink: FC<{
 export const Appbar = () => {
   const path = usePathname();
   const { user } = useSession();
-  const { libraries } = useLibraries();
+  const { libraries, servers, currentServer, setCurrentServer } = useLibraries();
+
+  const handleServerChange = async (value: string) => {
+    const server = servers.find(s => s.uri === value);
+    if (server) {
+      await setCurrentServer(server);
+      // Reload the page after user-initiated server change
+      window.location.href = "/";
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -59,14 +78,47 @@ export const Appbar = () => {
       <div className="flex flex-row gap-4 items-center">
         <Search />
         {user && (
-          <Button
-            className="justify-start px-2 font-bold"
-            size="sm"
-            type="button"
-            onClick={handleLogout}
-          >
-            <LogOut /> <span>Logout</span>
-          </Button>
+          <>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  className="justify-start px-2 font-bold" 
+                  size="sm"
+                >
+                  <ServerIcon className="mr-2 h-4 w-4" />
+                  {currentServer?.name || "Select Server"}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent 
+                className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border border-border"
+              >
+                <DropdownMenuLabel className="text-foreground">Select Server</DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-border" />
+                <DropdownMenuRadioGroup 
+                  value={currentServer?.uri} 
+                  onValueChange={handleServerChange}
+                >
+                  {servers.map((server) => (
+                    <DropdownMenuRadioItem
+                      key={server.uri}
+                      value={server.uri}
+                      className="text-foreground hover:bg-accent focus:bg-accent"
+                    >
+                      {server.name}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              className="justify-start px-2 font-bold"
+              size="sm"
+              type="button"
+              onClick={handleLogout}
+            >
+              <LogOut /> <span>Logout</span>
+            </Button>
+          </>
         )}
       </div>
     </div>
