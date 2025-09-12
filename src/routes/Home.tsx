@@ -3,12 +3,13 @@ import HomeHero from '@/components/HomeHero';
 import Row from '@/components/Row';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loadSettings } from '@/state/settings';
+import { loadSettings, saveSettings } from '@/state/settings';
 import { tmdbTrending, tmdbImage, tmdbVideos, tmdbImages } from '@/services/tmdb';
 import { traktTrending } from '@/services/trakt';
 import { plexOnDeckGlobal, plexImage, plexLibs, plexSectionAll, plexMetadataWithExtras, plexPartUrl, plexLibrarySecondary, plexDir } from '@/services/plex';
 import BrowseModal from '@/components/BrowseModal';
 import { plexTvWatchlist } from '@/services/plextv';
+import { createPin, pollPin, getResources, buildAuthUrl, pickBestConnection } from '@/services/plextv_auth';
 import SectionBanner from '@/components/SectionBanner';
 
 type Item = { id: string; title: string; image?: string; subtitle?: string; badge?: string };
@@ -35,6 +36,37 @@ export default function Home() {
     if (didInit.current) return; // prevent StrictMode double-run flicker
     didInit.current = true;
     const s = loadSettings();
+    if (!s.plexBaseUrl && !s.plexToken && !s.plexAccountToken) {
+      nav('/login');
+      return;
+    }
+    // Auto Plex sign-in if no server configured
+    (async () => {
+      if (!s.plexBaseUrl && !s.plexToken && !s.plexAccountToken) {
+        try {
+          const cid = s.plexClientId || crypto.randomUUID();
+          saveSettings({ plexClientId: cid });
+          const pin:any = await createPin(cid);
+          window.open(buildAuthUrl(cid, pin.code), '_blank');
+          const start = Date.now();
+          let authed: string | undefined;
+          while (Date.now() - start < 120000) {
+            const res:any = await pollPin(cid, pin.id);
+            if (res?.authToken) { authed = res.authToken; break; }
+            await new Promise(r => setTimeout(r, 3000));
+          }
+          if (authed) {
+            saveSettings({ plexAccountToken: authed });
+            const resources:any = await getResources(authed, cid);
+            const servers = (resources || []).filter((r:any)=> r.product === 'Plex Media Server');
+            if (servers.length) {
+              const best = pickBestConnection(servers[0]);
+              if (best) saveSettings({ plexServer: { name: servers[0].name, clientIdentifier: servers[0].clientIdentifier, baseUrl: best.uri, token: best.token }, plexBaseUrl: best.uri, plexToken: best.token });
+            }
+          }
+        } catch {}
+      }
+    })();
     async function run() {
       try {
         const rowsData: Array<{ title: string; items: Item[]; variant?: 'default'|'continue' }> = [];

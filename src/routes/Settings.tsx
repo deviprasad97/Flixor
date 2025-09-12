@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { loadSettings, saveSettings } from '@/state/settings';
+import { forget } from '@/services/cache';
+import { createPin, pollPin, getResources, buildAuthUrl, pickBestConnection } from '@/services/plextv_auth';
 
 export default function Settings() {
   const initial = loadSettings();
@@ -10,6 +12,9 @@ export default function Settings() {
   const [plexTvToken, setPlexTvToken] = useState(initial.plexTvToken || '');
   const [tmdbStatus, setTmdbStatus] = useState<string>('');
   const [plexStatus, setPlexStatus] = useState<string>('');
+  const [auth, setAuth] = useState<{pinId?: number; code?: string}>({});
+  const [servers, setServers] = useState<any[]>([]);
+  const [selectedServer, setSelectedServer] = useState<any>(initial.plexServer);
 
   useEffect(() => {
     const s = saveSettings({ plexBaseUrl: plexUrl, plexToken, tmdbBearer: tmdbKey, traktClientId: traktKey, plexTvToken });
@@ -20,6 +25,78 @@ export default function Settings() {
       <section>
         <h2 className="text-xl font-semibold mb-2">Accounts</h2>
         <div className="grid gap-3">
+          {/* Plex authentication via PIN */}
+          <div className="rounded-lg ring-1 ring-white/10 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm text-neutral-300">Plex Account</div>
+                {selectedServer ? (
+                  <div className="text-neutral-200 text-sm">Connected to {selectedServer?.name}</div>
+                ) : initial.plexAccountToken ? (
+                  <div className="text-neutral-400 text-sm">Authenticated. Select a server below.</div>
+                ) : (
+                  <div className="text-neutral-400 text-sm">Not signed in</div>
+                )}
+              </div>
+              {!initial.plexAccountToken && !auth.pinId && (
+                <button className="btn" onClick={async()=>{
+                  const cid = initial.plexClientId || crypto.randomUUID();
+                  saveSettings({ plexClientId: cid });
+                  const pin:any = await createPin(cid);
+                  setAuth({ pinId: pin.id, code: pin.code });
+                }}>Sign in with Plex</button>
+              )}
+              {initial.plexAccountToken && (
+                <button className="btn" onClick={async()=>{
+                  const cid = loadSettings().plexClientId!;
+                  const resources:any = await getResources(loadSettings().plexAccountToken!, cid);
+                  const list = (resources || []).filter((r:any)=> r.product === 'Plex Media Server');
+                  setServers(list);
+                }}>Refresh Servers</button>
+              )}
+            </div>
+            {auth.pinId && (
+              <div className="mt-3 text-sm">
+                <div className="mb-2">Enter this code at Plex: <span className="font-semibold text-white">{auth.code}</span></div>
+                <div className="flex gap-2">
+                  <button className="btn" onClick={()=> window.open(buildAuthUrl(loadSettings().plexClientId!, auth.code!), '_blank')}>Open Plex</button>
+                  <button className="btn" onClick={async()=>{
+                    const cid = loadSettings().plexClientId!;
+                    const res:any = await pollPin(cid, auth.pinId!);
+                    if (res?.authToken) {
+                      saveSettings({ plexAccountToken: res.authToken });
+                      setAuth({});
+                      const resources:any = await getResources(res.authToken, cid);
+                      const list = (resources || []).filter((r:any)=> r.product === 'Plex Media Server');
+                      setServers(list);
+                    }
+                  }}>Poll</button>
+                </div>
+              </div>
+            )}
+            {servers.length>0 && (
+              <div className="mt-3">
+                <div className="text-sm mb-2">Select a server</div>
+                <div className="grid gap-2">
+                  {servers.map((s:any, idx:number)=>{
+                    const best = pickBestConnection(s);
+                    return (
+                      <div key={idx} className="flex items-center justify-between bg-white/5 rounded px-3 py-2">
+                        <div className="text-neutral-200">{s.name || s.clientIdentifier}</div>
+                        <div className="flex gap-2">
+                          <button className="btn" onClick={async()=>{
+                            if (!best) return;
+                            saveSettings({ plexServer: { name: s.name, clientIdentifier: s.clientIdentifier, baseUrl: best.uri, token: best.token }, plexBaseUrl: best.uri, plexToken: best.token });
+                            setSelectedServer({ name: s.name, clientIdentifier: s.clientIdentifier, baseUrl: best.uri, token: best.token });
+                          }}>Use</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
           <L label="Plex URL"><input value={plexUrl} onChange={(e) => setPlexUrl(e.target.value)} placeholder="https://app.plex.tv" className="input" /></L>
           <L label="Plex Token"><input value={plexToken} onChange={(e) => setPlexToken(e.target.value)} placeholder="" className="input" /></L>
           <L label="TMDB API Key"><input value={tmdbKey} onChange={(e) => setTmdbKey(e.target.value)} className="input" /></L>
@@ -50,6 +127,10 @@ export default function Settings() {
               }
             }}>Test Plex</button>
             <span className="text-sm text-neutral-400">{plexStatus}</span>
+          </div>
+          <div className="flex gap-3">
+            <button className="btn" onClick={()=> { forget(''); alert('Cache cleared'); }}>Clear App Cache</button>
+            <button className="btn" onClick={()=> { saveSettings({ plexAccountToken: undefined, plexServer: undefined }); alert('Signed out from Plex'); }}>Sign out of Plex</button>
           </div>
         </div>
       </section>

@@ -1,4 +1,5 @@
 use serde_json::Value;
+use reqwest::header::{HeaderMap, HeaderValue};
 
 #[tauri::command]
 pub async fn tmdb_trending(media: String, window: String, bearer: String) -> Result<Value, String> {
@@ -7,6 +8,60 @@ pub async fn tmdb_trending(media: String, window: String, bearer: String) -> Res
   let res = client
     .get(url)
     .header("Authorization", format!("Bearer {}", bearer))
+    .send().await.map_err(|e| e.to_string())?;
+  res.json::<Value>().await.map_err(|e| e.to_string())
+}
+
+fn plex_headers(client_id: &str) -> HeaderMap {
+  let mut h = HeaderMap::new();
+  h.insert("X-Plex-Product", HeaderValue::from_static("MPV Plex Client"));
+  h.insert("X-Plex-Version", HeaderValue::from_static("1.0"));
+  h.insert("X-Plex-Client-Identifier", HeaderValue::from_str(client_id).unwrap());
+  h.insert("X-Plex-Platform", HeaderValue::from_static("Tauri"));
+  h.insert("X-Plex-Device", HeaderValue::from_static("Desktop"));
+  h
+}
+
+#[tauri::command]
+pub async fn plex_tv_pin_create(client_id: String) -> Result<Value, String> {
+  let client = reqwest::Client::new();
+  let res = client
+    .post("https://plex.tv/api/v2/pins")
+    .headers(plex_headers(&client_id))
+    .send().await.map_err(|e| e.to_string())?;
+  res.json::<Value>().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn plex_tv_pin_poll(client_id: String, pin_id: i64) -> Result<Value, String> {
+  let client = reqwest::Client::new();
+  let url = format!("https://plex.tv/api/v2/pins/{}", pin_id);
+  let res = client
+    .get(url)
+    .headers(plex_headers(&client_id))
+    .send().await.map_err(|e| e.to_string())?;
+  res.json::<Value>().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn plex_tv_resources(account_token: String, client_id: String) -> Result<Value, String> {
+  let client = reqwest::Client::new();
+  let mut h = plex_headers(&client_id);
+  h.insert("X-Plex-Token", HeaderValue::from_str(&account_token).unwrap());
+  let res = client
+    .get("https://plex.tv/api/v2/resources?includeHttps=1&includeRelay=1")
+    .headers(h)
+    .send().await.map_err(|e| e.to_string())?;
+  res.json::<Value>().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn plex_check_identity(base_url: String, token: String) -> Result<Value, String> {
+  let client = reqwest::Client::new();
+  let url = format!("{}/identity?X-Plex-Token={}", base_url.trim_end_matches('/'), token);
+  let res = client
+    .get(url)
+    .header("Accept", "application/json")
     .send().await.map_err(|e| e.to_string())?;
   res.json::<Value>().await.map_err(|e| e.to_string())
 }

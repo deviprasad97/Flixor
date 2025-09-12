@@ -1,4 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { loadSettings, saveSettings } from '@/state/settings';
+import { refreshPlexServers } from '@/services/plextv_auth';
 
 const items = [
   { to: '/', label: 'Home' },
@@ -11,6 +14,21 @@ const items = [
 
 export default function TopNav() {
   const { pathname } = useLocation();
+  const [open, setOpen] = useState(false);
+  const [servers, setServers] = useState<Array<{ name: string; clientIdentifier: string; bestUri: string; token: string }>>([]);
+  const [current, setCurrent] = useState<{ name: string } | null>(null);
+
+  useEffect(() => {
+    const s = loadSettings();
+    if (s.plexServer) setCurrent({ name: s.plexServer.name });
+    if (s.plexServers) setServers(s.plexServers);
+  }, []);
+
+  async function doRefresh() {
+    const list = await refreshPlexServers();
+    setServers(list);
+    saveSettings({ plexServers: list });
+  }
   return (
     <header className="sticky top-0 z-50 backdrop-blur-md">
       <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/10 to-transparent pointer-events-none" />
@@ -28,6 +46,28 @@ export default function TopNav() {
             <IconSearch />
             <span className="hidden md:block text-xs">Kids</span>
             <IconBell />
+            {/* Server switcher */}
+            <div className="relative hidden md:block">
+              <button className="btn" onClick={() => setOpen(v=>!v)}>{current?.name || 'Server'}</button>
+              {open && (
+                <div className="absolute right-0 mt-2 w-64 rounded-lg ring-1 ring-white/10 bg-black/80 backdrop-blur p-2 z-50">
+                  <div className="text-xs text-neutral-400 px-2 py-1">Servers</div>
+                  <div className="max-h-60 overflow-auto">
+                    {servers.map((s, i) => (
+                      <button key={i} className="w-full text-left px-2 py-1 rounded hover:bg-white/10" onClick={()=>{
+                        saveSettings({ plexServer: { name: s.name, clientIdentifier: s.clientIdentifier, baseUrl: s.bestUri, token: s.token }, plexBaseUrl: s.bestUri, plexToken: s.token });
+                        setCurrent({ name: s.name }); setOpen(false);
+                      }}>{s.name}</button>
+                    ))}
+                    {servers.length===0 && <div className="px-2 py-1 text-neutral-400">No servers</div>}
+                  </div>
+                  <div className="border-t border-white/10 mt-2 pt-2 flex justify-between">
+                    <button className="text-sm hover:text-white" onClick={doRefresh}>Refresh</button>
+                    <Link to="/settings" className="text-sm hover:text-white" onClick={()=> setOpen(false)}>Settings</Link>
+                  </div>
+                </div>
+              )}
+            </div>
             <Link to="/settings" className="hidden md:inline-flex items-center gap-1 text-sm hover:text-white">
               <IconCog />
               <span>Settings</span>

@@ -2,6 +2,10 @@ export type AppSettings = {
   plexBaseUrl?: string;
   plexToken?: string;
   plexTvToken?: string;
+  plexAccountToken?: string;
+  plexClientId?: string;
+  plexServer?: { name: string; clientIdentifier: string; baseUrl: string; token: string };
+  plexServers?: Array<{ name: string; clientIdentifier: string; bestUri: string; token: string }>;
   tmdbBearer?: string;
   traktClientId?: string;
 };
