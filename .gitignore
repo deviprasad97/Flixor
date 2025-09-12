@@ -1,0 +1,14 @@
+node_modules/
+dist/
+target/
+.DS_Store
+.idea/
+.vscode/
+*.log
+.env
+*.local
+coverage/
+tmp/
+/.tauri-updater/
+vendor/
+src-tauri/bin/

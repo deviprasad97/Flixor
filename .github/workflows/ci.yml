@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend deps
+        working-directory: app
+        run: |
+          npm ci
+
+      - name: Build frontend
+        working-directory: app
+        run: |
+          npm run build
+
+      - name: Install Tauri CLI
+        run: |
+          cargo install tauri-cli --locked --version ^2 || true
+
+      - name: Build Tauri app
+        working-directory: src-tauri
+        run: |
+          tauri build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: |
+            src-tauri/target/release/bundle/**/*
+

@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Prevent horizontal scroll from any bleed elements */
+html, body, #root { overflow-x: hidden; }
+
+/* Scrollbar tweaks */
+*::-webkit-scrollbar { height: 8px; width: 10px; }
+*::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
+
+/* Skeleton shimmer */
+.skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.12) 37%, rgba(255,255,255,0.06) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.2s infinite;
+}
+@keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+
+/* Utilities for Netflix-style UI */
+@layer components {
+  .input { @apply px-3 py-2 rounded bg-neutral-900 border border-neutral-800 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-white/10; }
+  .btn { @apply inline-flex items-center justify-center px-4 py-2 rounded bg-white/10 hover:bg-white/20 text-sm font-medium; }
+  .btn-primary { @apply bg-brand hover:bg-brand-600 text-white; }
+  .section { @apply px-4 md:px-6 lg:px-10 py-4; }
+  .container { @apply max-w-7xl mx-auto; }
+  .bg-app-gradient { background: radial-gradient(1200px 50% at 50% -10%, rgba(255,255,255,0.08), transparent), linear-gradient(to bottom, #0b0b0b, #141414); }
+  .card { @apply rounded-xl overflow-hidden ring-1 ring-white/5 bg-neutral-900/30; box-shadow: 0 16px 40px rgba(0,0,0,.55), 0 6px 18px rgba(0,0,0,.35); }
+  .card-hover { transition: transform 300ms ease, box-shadow 300ms ease; }
+  .card-hover:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 24px 60px rgba(0,0,0,.65), 0 8px 20px rgba(0,0,0,.45); }
+  .shadow-billboard { box-shadow: 0 24px 80px rgba(0,0,0,.65), 0 2px 0 rgba(255,255,255,.06) inset; }
+  /* Row scroller stays inset so rounded corners are respected on both ends */
+  .row-edge { padding-left: 24px; padding-right: 24px; }
+  @media (min-width: 768px) { .row-edge{ padding-left:32px; padding-right:32px; } }
+  .page-gutter { padding-left: 24px; padding-right: 24px; }
+  @media (min-width: 768px) { .page-gutter { padding-left: 32px; padding-right: 32px; } }
+  /* Viewport bleed that does not create horizontal scroll */
+  .bleed { width: 100vw; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); }
+  .row-band { position: relative; border-radius: 22px; overflow: hidden; border: 1px solid rgba(255,255,255,.06); background:
+    radial-gradient(1200px 50% at 50% -10%, rgba(255,255,255,0.06), transparent),
+    linear-gradient(180deg, rgba(110, 60, 40, .22) 0%, rgba(40, 20, 16, .18) 40%, rgba(20,20,20,.0) 100%);
+    box-shadow: 0 20px 60px rgba(0,0,0,.55), 0 6px 16px rgba(0,0,0,.35);
+  }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
+}
+
+/* Details hero layout */
+@layer components {
+  .hero-overlay { @apply absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent; }
+  .hero-panel { @apply relative rounded-2xl p-6 md:p-8 bg-black/40 ring-1 ring-white/10 backdrop-blur; }
+  .chip { @apply inline-flex items-center h-6 px-2 rounded bg-white/10 text-xs text-white mr-2 mb-2 ring-1 ring-white/10; }
+  .btn-ghost { @apply inline-flex items-center px-3 py-2 rounded-md bg-white/10 hover:bg-white/20 text-sm; }
+  .hero-mute { @apply absolute top-4 right-4 z-10 h-8 w-8 rounded-full bg-black/60 text-white flex items-center justify-center ring-1 ring-white/20; }
+}
