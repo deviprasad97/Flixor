@@ -63,20 +63,20 @@ export async function tmdbExternalIds(key: string, media: 'movie'|'tv', id: stri
   });
 }
 
-export async function tmdbRecommendations(key: string, media: 'movie'|'tv', id: string | number) {
+export async function tmdbRecommendations(key: string, media: 'movie'|'tv', id: string | number, page?: number) {
   const token = normalizeBearer(key);
-  return cached(`tmdb:recs:${media}:${id}`, 6 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/${media}/${id}/recommendations`;
+  return cached(`tmdb:recs:${media}:${id}:${page||1}`, 6 * 60 * 60 * 1000, async () => {
+    const url = `${TMDB}/${media}/${id}/recommendations${page?`?page=${page}`:''}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) throw new Error(`TMDB error ${res.status}`);
     return res.json();
   });
 }
 
-export async function tmdbSimilar(key: string, media: 'movie'|'tv', id: string | number) {
+export async function tmdbSimilar(key: string, media: 'movie'|'tv', id: string | number, page?: number) {
   const token = normalizeBearer(key);
-  return cached(`tmdb:similar:${media}:${id}`, 6 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/${media}/${id}/similar`;
+  return cached(`tmdb:similar:${media}:${id}:${page||1}`, 6 * 60 * 60 * 1000, async () => {
+    const url = `${TMDB}/${media}/${id}/similar${page?`?page=${page}`:''}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) throw new Error(`TMDB error ${res.status}`);
     return res.json();

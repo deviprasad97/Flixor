@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { loadSettings } from '@/state/settings';
 import { plexDir, plexImage } from '@/services/plex';
 import { plexTvWatchlist } from '@/services/plextv';
+import { tmdbRecommendations, tmdbSimilar, tmdbImage } from '@/services/tmdb';
 
 type Item = { id: string; title: string; image?: string };
 
@@ -15,12 +16,14 @@ export default function BrowseModal() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | ''>('');
+  const [tmdbCtx, setTmdbCtx] = useState<{ kind: 'recs'|'similar'; media: 'movie'|'tv'; id: string; page: number; total?: number } | null>(null);
 
   useEffect(() => {
     if (!open || !bkey) return;
     const s = loadSettings();
     async function run() {
       setLoading(true); setError(''); setItems([]); setTitle('');
+      setTmdbCtx(null);
       try {
         if (bkey.startsWith('/plextv/watchlist')) {
           if (!s.plexTvToken) throw new Error('Plex Account Token missing. Add it in Settings.');
@@ -33,6 +36,24 @@ export default function BrowseModal() {
             image: m.thumb || m.parentThumb || m.grandparentThumb,
           }));
           setItems(rows);
+          return;
+        }
+        // TMDB browse: recommendations/similar
+        if (bkey.startsWith('tmdb:')) {
+          const parts = bkey.split(':'); // tmdb:<kind>:<media>:<id>
+          const kind = parts[1];
+          const media = parts[2] as 'movie'|'tv';
+          const tmdbId = parts[3];
+          if (!s.tmdbBearer) throw new Error('TMDB key not configured');
+          setTitle(kind === 'recs' ? 'Recommendations' : 'More Like This');
+          // Load page 1 and set context for pagination
+          const res: any = kind === 'recs'
+            ? await tmdbRecommendations(s.tmdbBearer!, media, tmdbId, 1)
+            : await tmdbSimilar(s.tmdbBearer!, media, tmdbId, 1);
+          const list = (res?.results || []) as any[];
+          const rows: Item[] = list.map((r: any) => ({ id: `tmdb:${media}:${r.id}`, title: r.title || r.name, image: tmdbImage(r.backdrop_path, 'w780') || tmdbImage(r.poster_path, 'w500') }));
+          setItems(rows);
+          setTmdbCtx({ kind: kind === 'recs' ? 'recs' : 'similar', media, id: tmdbId, page: 1, total: res?.total_pages || undefined });
           return;
         }
         if (!s.plexBaseUrl || !s.plexToken) throw new Error('Plex not configured');
@@ -53,6 +74,27 @@ export default function BrowseModal() {
     run();
   }, [open, bkey]);
 
+  async function loadMore() {
+    const s = loadSettings();
+    if (!tmdbCtx || !s.tmdbBearer) return;
+    if (tmdbCtx.total && tmdbCtx.page >= tmdbCtx.total) return;
+    const next = tmdbCtx.page + 1;
+    try {
+      setLoading(true);
+      const res: any = tmdbCtx.kind === 'recs'
+        ? await tmdbRecommendations(s.tmdbBearer!, tmdbCtx.media, tmdbCtx.id, next)
+        : await tmdbSimilar(s.tmdbBearer!, tmdbCtx.media, tmdbCtx.id, next);
+      const list = (res?.results || []) as any[];
+      const rows: Item[] = list.map((r: any) => ({ id: `tmdb:${tmdbCtx.media}:${r.id}`, title: r.title || r.name, image: tmdbImage(r.backdrop_path, 'w780') || tmdbImage(r.poster_path, 'w500') }));
+      setItems((prev) => [...prev, ...rows]);
+      setTmdbCtx((c) => c ? { ...c, page: next, total: res?.total_pages || c.total } : c);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load next page');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   if (!open) return null;
 
   return (
@@ -67,16 +109,23 @@ export default function BrowseModal() {
           {loading ? (
             <div className="text-neutral-400">Loading…</div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {items.map((i, idx) => (
-                <button key={idx} className="text-left group" onClick={() => nav(`/details/${encodeURIComponent(i.id)}`)}>
-                  <div className="w-full aspect-video rounded-xl overflow-hidden ring-1 ring-white/10 bg-neutral-800 card-hover">
-                    {i.image && <img src={i.image} className="w-full h-full object-cover" />}
-                  </div>
-                  <div className="mt-1 text-sm line-clamp-2 text-neutral-200 group-hover:text-white transition-colors">{i.title}</div>
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {items.map((i, idx) => (
+                  <button key={idx} className="text-left group" onClick={() => nav(`/details/${encodeURIComponent(i.id)}`)}>
+                    <div className="w-full aspect-video rounded-xl overflow-hidden ring-1 ring-white/10 bg-neutral-800 card-hover">
+                      {i.image && <img src={i.image} className="w-full h-full object-cover" />}
+                    </div>
+                    <div className="mt-1 text-sm line-clamp-2 text-neutral-200 group-hover:text-white transition-colors">{i.title}</div>
+                  </button>
+                ))}
+              </div>
+              {tmdbCtx && (!tmdbCtx.total || tmdbCtx.page < (tmdbCtx.total || 1)) && (
+                <div className="mt-4 flex justify-center">
+                  <button onClick={loadMore} className="btn">Load more</button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

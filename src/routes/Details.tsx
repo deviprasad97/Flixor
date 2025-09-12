@@ -14,6 +14,7 @@ import EpisodeItem from '@/components/EpisodeItem';
 import EpisodeSkeletonList from '@/components/EpisodeSkeletonList';
 import SkeletonRow from '@/components/SkeletonRow';
 import TrackPicker, { Track } from '@/components/TrackPicker';
+import BrowseModal from '@/components/BrowseModal';
 
 export default function Details() {
   let { id } = useParams();
@@ -380,24 +381,27 @@ export default function Details() {
     <div className="bg-app-gradient">
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
       {/* Hero billboard full-bleed */}
-      <div className="bleed relative">
-        <img src={backdrop || `https://picsum.photos/seed/details-${id}/1600/900`} className={`w-full h-[64vh] md:h-[72vh] object-cover transition-opacity duration-700 ${showTrailer? 'opacity-0':'opacity-100'}`} />
-        <div className="hero-overlay" />
+      <div className="bleed relative h-[64vh] md:h-[72vh]">
+        {/* Background masked to fade bottom */}
+        <div className="hero-bg">
+          <img src={backdrop || `https://picsum.photos/seed/details-${id}/1600/900`} className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${showTrailer? 'opacity-0':'opacity-100'}`} />
+          <div className="hero-overlay" />
+          {(plexTrailerUrl || trailerKey) && (
+            <div className="absolute inset-0 opacity-40 pointer-events-none">
+              {plexTrailerUrl ? (
+                <video id="plex-trailer" className="w-full h-full object-cover" src={plexTrailerUrl} autoPlay muted={trailerMuted} loop playsInline />
+              ) : trailerKey ? (
+                <iframe id="yt-trailer" className="w-full h-full" src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=${trailerMuted?1:0}&controls=0&loop=1&playsinline=1&rel=0&showinfo=0&modestbranding=1&playlist=${trailerKey}&enablejsapi=1`} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" />
+              ) : null}
+            </div>
+          )}
+        </div>
         {(plexTrailerUrl || trailerKey) && (
-          <div className="absolute inset-0 z-0 opacity-40">
-            {plexTrailerUrl ? (
-              <video id="plex-trailer" className="w-full h-full object-cover" src={plexTrailerUrl} autoPlay muted={trailerMuted} loop playsInline />
-            ) : trailerKey ? (
-              <iframe id="yt-trailer" className="w-full h-full" src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=${trailerMuted?1:0}&controls=0&loop=1&playsinline=1&rel=0&showinfo=0&modestbranding=1&playlist=${trailerKey}&enablejsapi=1`} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" />
-            ) : null}
-          </div>
-        )}
-        {(plexTrailerUrl || trailerKey) && (
-          <button className="hero-mute" onClick={() => toggleMute()} title={trailerMuted? 'Unmute trailer':'Mute trailer'}>
+          <button className="hero-mute z-20" onClick={() => toggleMute()} title={trailerMuted? 'Unmute trailer':'Mute trailer'}>
             {trailerMuted ? '🔇' : '🔊'}
           </button>
         )}
-        <div className="absolute bottom-0 left-0 right-0 pb-8">
+        <div className="absolute bottom-0 left-0 right-0 pb-8 z-20">
           <div className="page-gutter">
             <div className="flex gap-6 items-end">
               <div className="hidden md:block w-[240px] md:w-[280px] -mb-6">
@@ -405,28 +409,30 @@ export default function Details() {
                   {poster ? <img src={poster} className="w-full h-auto object-cover" /> : <div className="aspect-[2/3] bg-neutral-800" />}
                 </div>
               </div>
-              <div className="flex-1 hero-panel">
-                <div className="text-xs tracking-wide text-brand mb-1">{kind==='movie' ? 'MOVIE' : (kind==='tv' ? 'TV SERIES' : 'TITLE')}</div>
-                {logoUrl ? (
-                  <img src={logoUrl} alt={title} className="h-10 md:h-16 object-contain mb-2" />
-                ) : (
-                  <h1 className="text-3xl md:text-5xl font-bold mb-2">{title}</h1>
-                )}
-                <div className="text-sm text-neutral-300 mb-3">
+              <div className="flex-1 hero-info">
+                <div className="hero-scrim" />
+                <div className="hero-content">
+                  <div className="text-xs tracking-wide text-brand mb-1">{kind==='movie' ? 'MOVIE' : (kind==='tv' ? 'TV SERIES' : 'TITLE')}</div>
+                  {logoUrl ? (
+                    <img src={logoUrl} alt={title} className="h-12 md:h-16 object-contain mb-3 drop-shadow-[0_6px_24px_rgba(0,0,0,.6)]" />
+                  ) : (
+                    <h1 className="text-4xl md:text-6xl font-extrabold mb-3 title-shadow">{title}</h1>
+                  )}
+                  <div className="flex gap-2 mb-4 items-center">
+                    {plexWatch ? (
+                      <button onClick={playSelected} className="cta-primary">Play</button>
+                    ) : (
+                      <button onClick={() => nav(`/player/${id}`)} className="cta-primary">Play</button>
+                    )}
+                    <button className="cta-ghost">Add to My List</button>
+                    <button className="cta-ghost">Mark Watched</button>
+                  </div>
+                  <div className="text-sm text-neutral-300 mb-3">
                   {meta.rating && <span className="chip">{meta.rating}</span>}
                   {meta.runtime ? <span className="chip">{meta.runtime} min</span> : null}
                   {badges.map((b)=> <span key={b} className="chip">{b}</span>)}
-                </div>
-                <div className="flex gap-2 mb-4 items-center">
-                  {plexWatch ? (
-                    <button onClick={playSelected} className="px-4 py-2 rounded-md bg-white text-black font-semibold shadow">Play</button>
-                  ) : (
-                    <button onClick={() => nav(`/player/${id}`)} className="px-4 py-2 rounded-md bg-white text-black font-semibold shadow">Play</button>
-                  )}
-                  <button className="btn-ghost">Add to My List</button>
-                  <button className="btn-ghost">Mark Watched</button>
-                </div>
-                <div className="text-sm text-neutral-300">
+                  </div>
+                  <div className="text-sm text-neutral-300">
                   {meta.genres && <div className="mb-1">Genres: <span className="font-medium text-white">{meta.genres.join(', ')}</span></div>}
                   {overview && <p className="max-w-3xl">{overview}</p>}
                   <VersionSelector versions={versions} active={activeVersion} onSelect={(id)=> setActiveVersion(id)} />
@@ -443,6 +449,7 @@ export default function Details() {
                   {!plexWatch && plexDetailsUrl && (
                     <div className="mt-3"><a href={plexDetailsUrl} target="_blank" rel="noreferrer" className="px-4 py-2 rounded-md bg-brand hover:bg-brand-600 text-white font-semibold">Open in Plex</a></div>
                   )}
+                </div>
                 </div>
               </div>
             </div>
@@ -471,8 +478,20 @@ export default function Details() {
           <section className="mt-4">
             {related.length>0 ? (
               <>
-                <Row title="Recommendations" items={related as any} onItemClick={(id)=> nav(`/details/${encodeURIComponent(id)}`)} />
-                {similar.length>0 && <Row title="More Like This" items={similar as any} onItemClick={(id)=> nav(`/details/${encodeURIComponent(id)}`)} />}
+                <Row
+                  title="Recommendations"
+                  items={related as any}
+                  browseKey={tmdbCtx?.id ? `tmdb:recs:${tmdbCtx.media}:${tmdbCtx.id}` : undefined}
+                  onItemClick={(id)=> nav(`/details/${encodeURIComponent(id)}`)}
+                />
+                {similar.length>0 && (
+                  <Row
+                    title="More Like This"
+                    items={similar as any}
+                    browseKey={tmdbCtx?.id ? `tmdb:similar:${tmdbCtx.media}:${tmdbCtx.id}` : undefined}
+                    onItemClick={(id)=> nav(`/details/${encodeURIComponent(id)}`)}
+                  />
+                )}
               </>
             ) : <SkeletonRow />}
           </section>
@@ -511,6 +530,7 @@ export default function Details() {
         )}
       </div>
       <PersonModal open={personOpen} onClose={()=> setPersonOpen(false)} personId={personId} name={personName} tmdbKey={loadSettings().tmdbBearer} />
+      <BrowseModal />
     </div>
   );
 }

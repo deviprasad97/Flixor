@@ -48,8 +48,34 @@ html, body, #root { overflow-x: hidden; }
 /* Details hero layout */
 @layer components {
   .hero-overlay { @apply absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent; }
-  .hero-panel { @apply relative rounded-2xl p-6 md:p-8 bg-black/40 ring-1 ring-white/10 backdrop-blur; }
+  /* Modern Netflix-like hero info: light scrim, no heavy glass */
+  .hero-info { position: relative; padding: 1.25rem; padding-left: 1.5rem; padding-right: 1.5rem; }
+  @media (min-width: 768px) { .hero-info { padding: 2rem; } }
+  .hero-scrim { position: absolute; inset: 0; left: -1rem; right: auto; width: min(860px, 90vw); z-index: 5;
+    background: linear-gradient(90deg, rgba(8,8,8,0.65) 0%, rgba(8,8,8,0.45) 45%, rgba(8,8,8,0.20) 75%, rgba(8,8,8,0.0) 100%);
+    backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%);
+    border-radius: 20px; border: 1px solid rgba(255,255,255,0.06);
+    box-shadow: 0 24px 60px rgba(0,0,0,.45);
+  }
+  .hero-content { position: relative; z-index: 10; }
+  .title-shadow { text-shadow: 0 6px 24px rgba(0,0,0,.8), 0 2px 8px rgba(0,0,0,.6); }
+  .cta-primary { @apply inline-flex items-center justify-center h-10 px-5 rounded-md font-semibold bg-white text-black hover:bg-neutral-100 shadow; }
+  .cta-ghost { @apply inline-flex items-center h-10 px-4 rounded-md bg-white/10 hover:bg-white/20 text-sm; }
   .chip { @apply inline-flex items-center h-6 px-2 rounded bg-white/10 text-xs text-white mr-2 mb-2 ring-1 ring-white/10; }
   .btn-ghost { @apply inline-flex items-center px-3 py-2 rounded-md bg-white/10 hover:bg-white/20 text-sm; }
   .hero-mute { @apply absolute top-4 right-4 z-10 h-8 w-8 rounded-full bg-black/60 text-white flex items-center justify-center ring-1 ring-white/20; }
+  /* Soft blur seam between hero and body to feather the transition */
+  .hero-seam {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 120px;
+    pointer-events: none;
+    z-index: 5; /* below hero content (z-20), above backdrop */
+    backdrop-filter: blur(14px) saturate(115%);
+    -webkit-backdrop-filter: blur(14px) saturate(115%);
+    background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(12,12,12,0.28) 55%, #0b0b0b 100%);
+  }
+  /* New: fade the hero background itself (image/video) so it blends into page */
+  .hero-bg { position: absolute; inset: 0; z-index: 0; }
+  .hero-bg { -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 100%); mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 100%); -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
 }
