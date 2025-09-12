@@ -40,6 +40,8 @@ export default function Details() {
   const [versions, setVersions] = useState<Array<{id:string; label:string}>>([]);
   const [activeVersion, setActiveVersion] = useState<string | undefined>(undefined);
   const [versionPartMap, setVersionPartMap] = useState<Record<string, string>>({});
+  const [versionDetails, setVersionDetails] = useState<Array<{id:string; label:string; audios: Track[]; subs: Track[]; tech: any}>>([]);
+  const [infoVersion, setInfoVersion] = useState<string | undefined>(undefined);
   const [audioTracks, setAudioTracks] = useState<Track[]>([]);
   const [subtitleTracks, setSubtitleTracks] = useState<Track[]>([]);
   const [activeAudio, setActiveAudio] = useState<string | undefined>(undefined);
@@ -116,13 +118,31 @@ export default function Details() {
             (m.Media||[]).forEach((me:any)=>{ const pid = me.Part?.[0]?.id; if ((me.id || me.Id) && pid) vm[String(me.id || me.Id)] = String(pid); });
             setVersionPartMap(vm);
             setVersions(vs); setActiveVersion(vs[0]?.id);
-            // Tracks from first version
+            // Build per-version media info
             try {
-              const first = (m.Media||[])[0];
-              const streams = first?.Part?.[0]?.Stream || [];
-              const auds: Track[] = streams.filter((st:any)=>st.streamType===2).map((st:any, i:number)=>({ id: String(st.id || i), label: (st.displayTitle || st.languageTag || st.language || `Audio ${i+1}`) }));
-              const subs: Track[] = streams.filter((st:any)=>st.streamType===3).map((st:any, i:number)=>({ id: String(st.id || i), label: (st.displayTitle || st.languageTag || st.language || `Sub ${i+1}`) }));
-              setAudioTracks(auds); setSubtitleTracks(subs); setActiveAudio(auds[0]?.id); setActiveSub(subs[0]?.id);
+              const vds: Array<{id:string; label:string; audios: Track[]; subs: Track[]; tech: any}> = (m.Media||[]).map((mm:any)=>{
+                const streams = mm?.Part?.[0]?.Stream || [];
+                const auds: Track[] = streams.filter((st:any)=>st.streamType===2).map((st:any, i:number)=>({ id: String(st.id || i), label: (st.displayTitle || st.languageTag || st.language || `Audio ${i+1}`) }));
+                const subs: Track[] = streams.filter((st:any)=>st.streamType===3).map((st:any, i:number)=>({ id: String(st.id || i), label: (st.displayTitle || st.languageTag || st.language || `Sub ${i+1}`) }));
+                const w = mm.width || 0; const h = mm.height || 0;
+                const techInfo = {
+                  rating: meta.rating,
+                  runtimeMin: Math.round((m.duration||0)/60000),
+                  videoCodec: mm.videoCodec, videoProfile: mm.videoProfile,
+                  resolution: w&&h? `${w}x${h}`: undefined,
+                  bitrateKbps: mm.bitrate ? mm.bitrate * 1000 : undefined,
+                  audioCodec: mm.audioCodec, audioChannels: mm.audioChannels,
+                  fileSizeMB: mm.Part?.[0]?.size ? mm.Part[0].size / (1024*1024) : undefined,
+                  subsCount: subs.length,
+                };
+                const label = `${(mm.width||0)>=3800?'4K':'HD'} ${String(mm.videoCodec||'').toUpperCase()} ${mm.audioChannels||''}`;
+                return { id: String(mm.id||mm.Id), label, audios: auds, subs, tech: techInfo };
+              });
+              setVersionDetails(vds);
+              setInfoVersion(vds[0]?.id);
+              // Keep backward-compat tracks state for quick display
+              const first = vds[0];
+              if (first) { setAudioTracks(first.audios); setSubtitleTracks(first.subs); }
             } catch {}
             // If this Plex item has a TMDB GUID, prefer TMDB textual metadata and recs/videos
             const tmdbGuid = (m.Guid || []).map((g:any)=>String(g.id||''))
@@ -295,6 +315,29 @@ export default function Details() {
                     const vp = (media0.videoProfile || '').toLowerCase(); if (vp.includes('hdr') || vp.includes('hlg')) extra.push('HDR'); if (vp.includes('dv')) extra.push('Dolby Vision');
                     const ap = (media0.audioProfile || '').toLowerCase(); const ac = (media0.audioCodec || '').toLowerCase(); if (ap.includes('atmos') || ac.includes('truehd')) extra.push('Atmos');
                   }
+                  // Per-version details for mapped Plex item
+                  try {
+                    const vds: Array<{id:string; label:string; audios: Track[]; subs: Track[]; tech: any}> = (m.Media||[]).map((mm:any)=>{
+                      const streams = mm?.Part?.[0]?.Stream || [];
+                      const auds: Track[] = streams.filter((st:any)=>st.streamType===2).map((st:any, i:number)=>({ id: String(st.id || i), label: (st.displayTitle || st.languageTag || st.language || `Audio ${i+1}`) }));
+                      const subs: Track[] = streams.filter((st:any)=>st.streamType===3).map((st:any, i:number)=>({ id: String(st.id || i), label: (st.displayTitle || st.languageTag || st.language || `Sub ${i+1}`) }));
+                      const w = mm.width || 0; const h = mm.height || 0;
+                      const techInfo = {
+                        rating: m.contentRating || m.rating,
+                        runtimeMin: Math.round((m.duration||0)/60000),
+                        videoCodec: mm.videoCodec, videoProfile: mm.videoProfile,
+                        resolution: w&&h? `${w}x${h}`: undefined,
+                        bitrateKbps: mm.bitrate ? mm.bitrate * 1000 : undefined,
+                        audioCodec: mm.audioCodec, audioChannels: mm.audioChannels,
+                        fileSizeMB: mm.Part?.[0]?.size ? mm.Part[0].size / (1024*1024) : undefined,
+                        subsCount: subs.length,
+                      };
+                      const label = `${(mm.width||0)>=3800?'4K':'HD'} ${String(mm.videoCodec||'').toUpperCase()} ${mm.audioChannels||''}`;
+                      return { id: String(mm.id||mm.Id), label, audios: auds, subs, tech: techInfo };
+                    });
+                    setVersionDetails(vds);
+                    setInfoVersion(vds[0]?.id);
+                  } catch {}
                   setBadges((b) => Array.from(new Set([...b, ...extra, 'Plex'])));
                   const part = media0?.Part?.[0];
                   if (part?.id) setPlexWatch(`${s.plexBaseUrl!.replace(/\/$/, '')}/library/parts/${part.id}/stream?X-Plex-Token=${s.plexToken}`);
@@ -449,18 +492,25 @@ export default function Details() {
                         </button>
                         {showMediaInfo && (
                           <div className="mt-2 text-sm text-neutral-300">
-                            <div className="mb-2">
-                              <VersionSelector versions={versions} active={activeVersion} onSelect={(id)=> setActiveVersion(id)} />
-                            </div>
+                            {/* Version tabs */}
+                            {versionDetails.length>0 && (
+                              <div className="mb-2 flex flex-wrap gap-2">
+                                {versionDetails.map(v => (
+                                  <button key={v.id} onClick={()=> { setInfoVersion(v.id); setActiveVersion(v.id); setAudioTracks(v.audios); setSubtitleTracks(v.subs); }}
+                                    className={`h-8 px-3 rounded-full text-xs ring-1 ${infoVersion===v.id? 'bg-white text-black ring-white/0':'bg-white/5 text-neutral-200 hover:bg-white/10 ring-white/10'}`}
+                                  >{v.label}</button>
+                                ))}
+                              </div>
+                            )}
                             <div className="mb-2">
                               <span className="meta-label mr-2">Audio:</span>
-                              {(audioTracks||[]).map((a,i)=> <span key={i} className="chip">{a.label}</span>)}
+                              {(versionDetails.find(v=>v.id===infoVersion)?.audios || audioTracks || []).map((a:any,i:number)=> <span key={i} className="chip">{a.label}</span>)}
                             </div>
                             <div className="mb-2">
                               <span className="meta-label mr-2">Subtitles:</span>
-                              {(subtitleTracks||[]).map((s,i)=> <span key={i} className="chip">{s.label}</span>)}
+                              {(versionDetails.find(v=>v.id===infoVersion)?.subs || subtitleTracks || []).map((s:any,i:number)=> <span key={i} className="chip">{s.label}</span>)}
                             </div>
-                            <TechnicalChips info={{
+                            <TechnicalChips info={(versionDetails.find(v=>v.id===infoVersion)?.tech) || {
                               rating: meta.rating,
                               runtimeMin: meta.runtime,
                               videoCodec: tech.videoCodec, videoProfile: tech.videoProfile, resolution: tech.resolution,
