@@ -53,6 +53,7 @@ export default function Details() {
   const [plexTrailerUrl, setPlexTrailerUrl] = useState<string | undefined>(undefined);
   const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
   const [showMediaInfo, setShowMediaInfo] = useState<boolean>(false);
+  const [moodTags, setMoodTags] = useState<string[]>([]);
   const [personOpen, setPersonOpen] = useState(false);
   const [personId, setPersonId] = useState<string | undefined>(undefined);
   const [personName, setPersonName] = useState<string | undefined>(undefined);
@@ -82,6 +83,7 @@ export default function Details() {
               rating: m.contentRating || m.rating,
             });
             if (m.year) setYear(String(m.year));
+            try { setMoodTags(deriveTags((m.Genre||[]).map((g:any)=>g.tag))); } catch {}
             setCast((m.Role || []).slice(0, 12).map((r: any) => ({ name: r.tag, img: plexImage(s.plexBaseUrl!, s.plexToken!, r.thumb) })));
             // Badges detection
             const bs: string[] = [];
@@ -158,6 +160,7 @@ export default function Details() {
                   setPoster(tmdbImage(d.poster_path, 'w500') || poster);
                   setMeta({ genres: (d.genres||[]).map((x:any)=>x.name), runtime: Math.round((d.runtime||d.episode_run_time?.[0]||0)), rating: m.contentRating || m.rating });
                   const y2 = (d.release_date || d.first_air_date || '').slice(0,4); if (y2) setYear(y2);
+                  try { setMoodTags(deriveTags((d.genres||[]).map((g:any)=>g.name))); } catch {}
                   // Try fetch a logo image
                   try {
                     const imgs: any = await tmdbImages(s.tmdbBearer!, mediaType as any, tid, 'en,null');
@@ -218,6 +221,7 @@ export default function Details() {
               rating: d.adult ? '18+' : undefined,
             });
             const y = (d.release_date || d.first_air_date || '').slice(0,4); if (y) setYear(y);
+            try { setMoodTags(deriveTags((d.genres||[]).map((g:any)=>g.name))); } catch {}
             setKind((media as any) === 'movie' ? 'movie' : 'tv');
             try {
               const cr: any = await tmdbCredits(s.tmdbBearer!, media as any, tmdbId);
@@ -469,14 +473,26 @@ export default function Details() {
                       <h1 className="text-5xl md:text-7xl font-extrabold mb-3 title-shadow">{title}</h1>
                     )}
                     <div className="flex gap-2 mb-4 items-center">
-                      {plexWatch ? (
-                        <button onClick={playSelected} className="cta-primary">Play</button>
-                      ) : (
-                        <button onClick={() => nav(`/player/${id}`)} className="cta-primary">Play</button>
-                      )}
-                      <button className="cta-ghost" title="Add to My List">Add</button>
-                      <button className="cta-ghost" title="Mark Watched">Watched</button>
-                    </div>
+                    {plexWatch ? (
+                      <button onClick={playSelected} className="cta-primary">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="mr-2"><path d="M8 5v14l11-7z"/></svg>
+                        Play
+                      </button>
+                    ) : (
+                      <button onClick={() => nav(`/player/${id}`)} className="cta-primary">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="mr-2"><path d="M8 5v14l11-7z"/></svg>
+                        Play
+                      </button>
+                    )}
+                    <button className="cta-ghost" title="Add to My List">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="mr-1"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></svg>
+                      Add
+                    </button>
+                    <button className="cta-ghost" title="Mark Watched">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="mr-1"><path d="M9 16.17l-3.88-3.88L4 13.41 9 18.41 20 7.41 18.59 6l-9.59 9.59z"/></svg>
+                      Watched
+                    </button>
+                  </div>
                     <div className="text-sm text-neutral-300 mb-3 flex flex-wrap items-center gap-2">
                       {year && <span className="chip">{year}</span>}
                       {meta.runtime ? <span className="chip">{meta.runtime} min</span> : null}
@@ -536,15 +552,23 @@ export default function Details() {
                         </div>
                       </div>
                     )}
-                    {meta.genres && meta.genres.length>0 && (
-                      <div className="mb-3">
-                        <div className="meta-label mb-1">Genres</div>
-                        <div className="flex flex-wrap gap-2">
-                          {meta.genres.map((g,i)=>(<span key={i} className="chip">{g}</span>))}
-                        </div>
+                  {meta.genres && meta.genres.length>0 && (
+                    <div className="mb-3">
+                      <div className="meta-label mb-1">Genres</div>
+                      <div className="flex flex-wrap gap-2">
+                        {meta.genres.map((g,i)=>(<span key={i} className="chip">{g}</span>))}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
+                  {moodTags.length>0 && (
+                    <div>
+                      <div className="meta-label mb-1">{kind==='tv' ? 'This Series Is' : 'This Movie Is'}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {moodTags.map((t,i)=>(<span key={i} className="chip">{t}</span>))}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 </div>
                 </div>
               </div>
@@ -676,4 +700,18 @@ function toggleMute() {
     const root = (window as any).reactSetTrailerMuted as ((v:boolean)=>void)|undefined;
     if (root) root(muted);
   } catch (e) { console.error(e); }
+}
+
+// Simple tag derivation from genres to mimic Netflix mood tags
+function deriveTags(genres: string[]): string[] {
+  const g = (genres || []).map(x => x.toLowerCase());
+  const tags = new Set<string>();
+  if (g.some(x=>['thriller','mystery','crime'].includes(x))) tags.add('Suspenseful');
+  if (g.some(x=>['comedy','sitcom'].includes(x))) tags.add('Witty');
+  if (g.some(x=>['action','adventure'].includes(x))) tags.add('Exciting');
+  if (g.some(x=>['drama'].includes(x))) tags.add('Emotional');
+  if (g.some(x=>['horror'].includes(x))) tags.add('Scary');
+  if (g.some(x=>['family','kids'].includes(x))) tags.add('Family-friendly');
+  if (g.some(x=>['documentary'].includes(x))) tags.add('Inspiring');
+  return Array.from(tags).slice(0, 4);
 }
