@@ -218,6 +218,17 @@ export default function Home() {
     run();
   }, []);
 
+  // Refresh entire app when server changes
+  useEffect(() => {
+    const handler = () => window.location.reload();
+    // @ts-ignore - CustomEvent typing
+    window.addEventListener('plex-server-changed', handler as any);
+    return () => {
+      // @ts-ignore - CustomEvent typing
+      window.removeEventListener('plex-server-changed', handler as any);
+    };
+  }, []);
+
   return (
     <div className="pb-10 bg-app-gradient">
       <div className="pt-16" />

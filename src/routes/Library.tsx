@@ -41,6 +41,17 @@ export default function Library() {
     load();
   }, []);
 
+  // Reload app when server changes so sections/items refresh
+  useEffect(() => {
+    const handler = () => window.location.reload();
+    // @ts-ignore
+    window.addEventListener('plex-server-changed', handler as any);
+    return () => {
+      // @ts-ignore
+      window.removeEventListener('plex-server-changed', handler as any);
+    };
+  }, []);
+
   useEffect(() => {
     const s = loadSettings();
     if (!active || !s.plexBaseUrl || !s.plexToken) return;

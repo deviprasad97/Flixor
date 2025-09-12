@@ -88,6 +88,9 @@ export default function Settings() {
                             if (!best) return;
                             saveSettings({ plexServer: { name: s.name, clientIdentifier: s.clientIdentifier, baseUrl: best.uri, token: best.token }, plexBaseUrl: best.uri, plexToken: best.token });
                             setSelectedServer({ name: s.name, clientIdentifier: s.clientIdentifier, baseUrl: best.uri, token: best.token });
+                            // Clear Plex caches and notify app to refresh
+                            forget('plex:');
+                            window.dispatchEvent(new CustomEvent('plex-server-changed', { detail: { name: s.name, baseUrl: best.uri } }));
                           }}>Use</button>
                         </div>
                       </div>

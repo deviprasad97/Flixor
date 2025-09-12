@@ -417,15 +417,9 @@ export default function Details() {
   const tabs = seasons.length > 0 ? ['EPISODES','RECOMMENDATIONS','INFO','REVIEWS'] : ['RECOMMENDATIONS','INFO','REVIEWS'];
   const playSelected = async () => {
     try {
-      if (plexWatch) {
-        const base = plexWatch.split('/library/parts/')[0];
-        const partId = (activeVersion && versionPartMap[activeVersion]) || plexWatch.match(/\/library\/parts\/(\d+)/)?.[1];
-        const tail = plexWatch.replace(/^[^?]+/, '');
-        const url = partId ? `${base}/library/parts/${partId}/stream${tail}` : plexWatch;
-        await watchOnPlex(url);
-      } else {
-        nav(`/player/${id}`);
-      }
+    // Always go through in-app player so both Web and Tauri paths work consistently
+    const ver = activeVersion ? `?v=${encodeURIComponent(activeVersion)}` : '';
+    nav(`/player/${id}${ver}`);
     } catch (e) { console.error(e); }
   };
 
@@ -479,7 +473,7 @@ export default function Details() {
                         Play
                       </button>
                     ) : (
-                      <button onClick={() => nav(`/player/${id}`)} className="cta-primary">
+                      <button onClick={() => nav(`/player/${id}${activeVersion?`?v=${encodeURIComponent(activeVersion)}`:''}`)} className="cta-primary">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="mr-2"><path d="M8 5v14l11-7z"/></svg>
                         Play
                       </button>

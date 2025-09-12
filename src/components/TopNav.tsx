@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { loadSettings, saveSettings } from '@/state/settings';
+import { forget } from '@/services/cache';
 import { refreshPlexServers } from '@/services/plextv_auth';
 
 const items = [
@@ -55,8 +56,12 @@ export default function TopNav() {
                   <div className="max-h-60 overflow-auto">
                     {servers.map((s, i) => (
                       <button key={i} className="w-full text-left px-2 py-1 rounded hover:bg-white/10" onClick={()=>{
+                        // Persist new server and clear Plex caches
                         saveSettings({ plexServer: { name: s.name, clientIdentifier: s.clientIdentifier, baseUrl: s.bestUri, token: s.token }, plexBaseUrl: s.bestUri, plexToken: s.token });
+                        forget('plex:');
                         setCurrent({ name: s.name }); setOpen(false);
+                        // Notify app to refresh Plex-backed views
+                        window.dispatchEvent(new CustomEvent('plex-server-changed', { detail: { name: s.name, baseUrl: s.bestUri } }));
                       }}>{s.name}</button>
                     ))}
                     {servers.length===0 && <div className="px-2 py-1 text-neutral-400">No servers</div>}
