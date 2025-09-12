@@ -52,6 +52,7 @@ export default function Details() {
   const [personId, setPersonId] = useState<string | undefined>(undefined);
   const [personName, setPersonName] = useState<string | undefined>(undefined);
   const [tmdbCtx, setTmdbCtx] = useState<{ media?: 'movie'|'tv'; id?: string } | undefined>(undefined);
+  const [kind, setKind] = useState<'movie'|'tv'|undefined>(undefined);
 
   useEffect(() => {
     // expose setter for trailer mute to toggle function
@@ -69,6 +70,7 @@ export default function Details() {
             setOverview(m.summary || '');
             setBackdrop(plexImage(s.plexBaseUrl!, s.plexToken!, m.art || m.thumb || m.parentThumb || m.grandparentThumb) || backdrop);
             setPoster(plexImage(s.plexBaseUrl!, s.plexToken!, m.thumb || m.parentThumb || m.grandparentThumb));
+            setKind(m.type === 'movie' ? 'movie' : (m.type === 'show' ? 'tv' : undefined));
             setMeta({
               genres: (m.Genre || []).map((g: any) => g.tag),
               runtime: Math.round((m.duration || 0) / 60000),
@@ -124,6 +126,7 @@ export default function Details() {
             if (s.tmdbBearer && tmdbGuid) {
               const tid = tmdbGuid.split('://')[1];
               const mediaType = (m.type === 'movie') ? 'movie' : 'tv';
+              setKind(mediaType);
                 try {
                   const d: any = await tmdbDetails(s.tmdbBearer!, mediaType as any, tid);
                   setTitle(d.title || d.name || title);
@@ -189,6 +192,7 @@ export default function Details() {
               runtime: Math.round((d.runtime || d.episode_run_time?.[0] || 0)),
               rating: d.adult ? '18+' : undefined,
             });
+            setKind((media as any) === 'movie' ? 'movie' : 'tv');
             try {
               const cr: any = await tmdbCredits(s.tmdbBearer!, media as any, tmdbId);
               setCast((cr.cast || []).slice(0, 12).map((c: any) => ({ id: String(c.id), name: c.name, img: tmdbImage(c.profile_path, 'w500') })));
@@ -402,7 +406,7 @@ export default function Details() {
                 </div>
               </div>
               <div className="flex-1 hero-panel">
-                <div className="text-xs tracking-wide text-brand mb-1">{meta.rating ? 'MOVIE' : 'TITLE'}</div>
+                <div className="text-xs tracking-wide text-brand mb-1">{kind==='movie' ? 'MOVIE' : (kind==='tv' ? 'TV SERIES' : 'TITLE')}</div>
                 {logoUrl ? (
                   <img src={logoUrl} alt={title} className="h-10 md:h-16 object-contain mb-2" />
                 ) : (

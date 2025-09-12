@@ -29,11 +29,11 @@ html, body, #root { overflow-x: hidden; }
   .card-hover { transition: transform 300ms ease, box-shadow 300ms ease; }
   .card-hover:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 24px 60px rgba(0,0,0,.65), 0 8px 20px rgba(0,0,0,.45); }
   .shadow-billboard { box-shadow: 0 24px 80px rgba(0,0,0,.65), 0 2px 0 rgba(255,255,255,.06) inset; }
-  /* Row scroller stays inset so rounded corners are respected on both ends */
-  .row-edge { padding-left: 24px; padding-right: 24px; }
-  @media (min-width: 768px) { .row-edge{ padding-left:32px; padding-right:32px; } }
+  /* Row scroller: no inner padding so cards align to band; outer page-gutter handles outside spacing */
+  .row-edge { padding-left: 0; padding-right: 0; -webkit-overflow-scrolling: touch; }
+  @media (min-width: 768px) { .row-edge{ padding-left:0; padding-right:0; } }
   .page-gutter { padding-left: 24px; padding-right: 24px; }
-  @media (min-width: 768px) { .page-gutter { padding-left: 32px; padding-right: 32px; } }
+  @media (min-width: 768px) { .page-gutter { padding-left: 14px; padding-right: 14px; } }
   /* Viewport bleed that does not create horizontal scroll */
   .bleed { width: 100vw; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); }
   .row-band { position: relative; border-radius: 22px; overflow: hidden; border: 1px solid rgba(255,255,255,.06); background:

@@ -1,7 +1,7 @@
 import Billboard from '@/components/Billboard';
 import HomeHero from '@/components/HomeHero';
 import Row from '@/components/Row';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loadSettings } from '@/state/settings';
 import { tmdbTrending, tmdbImage, tmdbVideos, tmdbImages } from '@/services/tmdb';
@@ -30,11 +30,17 @@ export default function Home() {
     { label: 'Movies - Animation', type: 'movie', genre: 'Animation' },
   ];
 
+  const didInit = useRef(false);
   useEffect(() => {
+    if (didInit.current) return; // prevent StrictMode double-run flicker
+    didInit.current = true;
     const s = loadSettings();
     async function run() {
       try {
         const rowsData: Array<{ title: string; items: Item[]; variant?: 'default'|'continue' }> = [];
+        let tmdbHero: any | null = null;
+        let plexHero: any | null = null;
+        let heroLogoUrl: string | undefined = undefined;
         if (s.tmdbBearer) {
           const tmdb = await tmdbTrending(s.tmdbBearer, 'tv', 'week');
           const items: Item[] = (tmdb as any).results?.slice(0, 16).map((r: any) => ({
@@ -44,22 +50,17 @@ export default function Home() {
           })) || [];
           rowsData.push({ title: 'Popular on Netflix', items: items.slice(0, 8) });
           rowsData.push({ title: 'Trending Now', items: items.slice(8, 16) });
-          // Fallback hero (TMDB) if Plex not configured or if we fail to get Plex hero
+          // Prepare TMDB fallback hero (do not set yet)
           try {
-            if (!hero && (tmdb as any).results?.length) {
+            if ((tmdb as any).results?.length) {
               const f = (tmdb as any).results[0];
-              // Attempt to fetch a video key for trailer
               let ytKey: string | undefined;
               try { const vids: any = await tmdbVideos(s.tmdbBearer!, 'tv', String(f.id)); ytKey = (vids.results||[]).find((v:any)=>v.site==='YouTube')?.key; } catch {}
-              setHero({ title: f.name||f.title, overview: f.overview, poster: tmdbImage(f.poster_path,'w500')||undefined, backdrop: tmdbImage(f.backdrop_path,'w1280')||undefined, rating: undefined, ytKey, id: `tmdb:tv:${String(f.id)}` });
-              // Try fetch logo and broadcast to HomeHero via custom event
+              tmdbHero = { title: f.name||f.title, overview: f.overview, poster: tmdbImage(f.poster_path,'w500')||undefined, backdrop: tmdbImage(f.backdrop_path,'w1280')||undefined, rating: undefined, ytKey, id: `tmdb:tv:${String(f.id)}` };
               try {
                 const imgs: any = await tmdbImages(s.tmdbBearer!, 'tv', String(f.id), 'en,null');
                 const logo = (imgs?.logos||[]).find((l:any)=>l.iso_639_1==='en') || (imgs?.logos||[])[0];
-                if (logo?.file_path) {
-                  const url = tmdbImage(logo.file_path, 'w500') || tmdbImage(logo.file_path, 'original');
-                  if (url) window.dispatchEvent(new CustomEvent('home-hero-logo', { detail: { logoUrl: url } }));
-                }
+                if (logo?.file_path) heroLogoUrl = tmdbImage(logo.file_path, 'w500') || tmdbImage(logo.file_path, 'original');
               } catch {}
             }
           } catch {}
@@ -150,7 +151,7 @@ export default function Home() {
               const backdrop = plexImage(s.plexBaseUrl!, s.plexToken!, mm.art || mm.parentThumb || mm.grandparentThumb || mm.thumb);
               const extra = mm?.Extras?.Metadata?.[0]?.Media?.[0]?.Part?.[0]?.key as string | undefined;
               const videoUrl = extra ? plexPartUrl(s.plexBaseUrl!, s.plexToken!, extra) : undefined;
-              setHero({ title: mm.title || mm.grandparentTitle || 'Title', overview: mm.summary, poster, backdrop, rating: mm.contentRating || undefined, videoUrl, id: `plex:${String(mm.ratingKey)}` });
+              plexHero = { title: mm.title || mm.grandparentTitle || 'Title', overview: mm.summary, poster, backdrop, rating: mm.contentRating || undefined, videoUrl, id: `plex:${String(mm.ratingKey)}` };
               // If this item has a TMDB GUID, try TMDB logo and dispatch
               try {
                 const tmdbGuid = (mm.Guid || []).map((g:any)=>String(g.id||''))
@@ -160,10 +161,7 @@ export default function Home() {
                   const mediaType = (mm.type === 'movie') ? 'movie' : 'tv';
                   const imgs: any = await tmdbImages(s.tmdbBearer!, mediaType as any, tid, 'en,null');
                   const logo = (imgs?.logos||[]).find((l:any)=>l.iso_639_1==='en') || (imgs?.logos||[])[0];
-                  if (logo?.file_path) {
-                    const url = tmdbImage(logo.file_path, 'w500') || tmdbImage(logo.file_path, 'original');
-                    if (url) window.dispatchEvent(new CustomEvent('home-hero-logo', { detail: { logoUrl: url } }));
-                  }
+                  if (logo?.file_path) heroLogoUrl = tmdbImage(logo.file_path, 'w500') || tmdbImage(logo.file_path, 'original');
                 }
               } catch {}
               break;
@@ -173,6 +171,12 @@ export default function Home() {
           setNeedsPlex(true);
         }
         setRows(rowsData);
+        // Commit hero once with final choice (prefer Plex)
+        const finalHero = plexHero || tmdbHero;
+        if (!hero && finalHero) {
+          setHero(finalHero);
+          if (heroLogoUrl) window.dispatchEvent(new CustomEvent('home-hero-logo', { detail: { logoUrl: heroLogoUrl } }));
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -197,7 +201,9 @@ export default function Home() {
           onPlay={() => { if (hero.id) nav(`/details/${encodeURIComponent(hero.id)}`); }}
         />
       ) : (
-        <Billboard image={`https://picsum.photos/seed/bill/1600/800`} rating="TV-Y7" onPlay={() => {}} />
+        <div className="bleed" style={{ padding: '20px' }}>
+          <div className="rounded-2xl overflow-hidden ring-1 ring-white/10 bg-neutral-900/40 h-[56vh] md:h-[64vh] xl:h-[68vh] skeleton" />
+        </div>
       )}
       <div className="mt-6" />
       {needsPlex && (
