@@ -27,6 +27,7 @@ export default function Details() {
   const [related, setRelated] = useState<any[]>([]);
   const [similar, setSimilar] = useState<any[]>([]);
   const [meta, setMeta] = useState<{ genres?: string[]; runtime?: number; rating?: string }>({});
+  const [year, setYear] = useState<string | undefined>(undefined);
   const [cast, setCast] = useState<Array<{ id?: string; name: string; img?: string }>>([]);
   const [plexWatch, setPlexWatch] = useState<string | undefined>(undefined);
   const [poster, setPoster] = useState<string | undefined>(undefined);
@@ -49,6 +50,7 @@ export default function Details() {
   const [showTrailer, setShowTrailer] = useState<boolean>(false);
   const [plexTrailerUrl, setPlexTrailerUrl] = useState<string | undefined>(undefined);
   const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
+  const [showMediaInfo, setShowMediaInfo] = useState<boolean>(false);
   const [personOpen, setPersonOpen] = useState(false);
   const [personId, setPersonId] = useState<string | undefined>(undefined);
   const [personName, setPersonName] = useState<string | undefined>(undefined);
@@ -77,6 +79,7 @@ export default function Details() {
               runtime: Math.round((m.duration || 0) / 60000),
               rating: m.contentRating || m.rating,
             });
+            if (m.year) setYear(String(m.year));
             setCast((m.Role || []).slice(0, 12).map((r: any) => ({ name: r.tag, img: plexImage(s.plexBaseUrl!, s.plexToken!, r.thumb) })));
             // Badges detection
             const bs: string[] = [];
@@ -134,6 +137,7 @@ export default function Details() {
                   setOverview(d.overview || overview);
                   setPoster(tmdbImage(d.poster_path, 'w500') || poster);
                   setMeta({ genres: (d.genres||[]).map((x:any)=>x.name), runtime: Math.round((d.runtime||d.episode_run_time?.[0]||0)), rating: m.contentRating || m.rating });
+                  const y2 = (d.release_date || d.first_air_date || '').slice(0,4); if (y2) setYear(y2);
                   // Try fetch a logo image
                   try {
                     const imgs: any = await tmdbImages(s.tmdbBearer!, mediaType as any, tid, 'en,null');
@@ -193,6 +197,7 @@ export default function Details() {
               runtime: Math.round((d.runtime || d.episode_run_time?.[0] || 0)),
               rating: d.adult ? '18+' : undefined,
             });
+            const y = (d.release_date || d.first_air_date || '').slice(0,4); if (y) setYear(y);
             setKind((media as any) === 'movie' ? 'movie' : 'tv');
             try {
               const cr: any = await tmdbCredits(s.tmdbBearer!, media as any, tmdbId);
@@ -411,51 +416,91 @@ export default function Details() {
               </div>
               <div className="flex-1 hero-info">
                 <div className="hero-scrim" />
-                <div className="hero-content">
-                  <div className="text-xs tracking-wide text-brand mb-1">{kind==='movie' ? 'MOVIE' : (kind==='tv' ? 'TV SERIES' : 'TITLE')}</div>
-                  {logoUrl ? (
-                    <img src={logoUrl} alt={title} className="h-12 md:h-16 object-contain mb-3 drop-shadow-[0_6px_24px_rgba(0,0,0,.6)]" />
-                  ) : (
-                    <h1 className="text-4xl md:text-6xl font-extrabold mb-3 title-shadow">{title}</h1>
-                  )}
-                  <div className="flex gap-2 mb-4 items-center">
-                    {plexWatch ? (
-                      <button onClick={playSelected} className="cta-primary">Play</button>
+                <div className="hero-content hero-grid">
+                  {/* Left column */}
+                  <div className="hero-col-left">
+                    <div className="text-xs tracking-wide text-brand mb-1">{kind==='movie' ? 'MOVIE' : (kind==='tv' ? 'TV SERIES' : 'TITLE')}</div>
+                    {logoUrl ? (
+                      <img src={logoUrl} alt={title} className="h-16 md:h-20 object-contain mb-3 drop-shadow-[0_6px_24px_rgba(0,0,0,.6)]" />
                     ) : (
-                      <button onClick={() => nav(`/player/${id}`)} className="cta-primary">Play</button>
+                      <h1 className="text-5xl md:text-7xl font-extrabold mb-3 title-shadow">{title}</h1>
                     )}
-                    <button className="cta-ghost">Add to My List</button>
-                    <button className="cta-ghost">Mark Watched</button>
+                    <div className="flex gap-2 mb-4 items-center">
+                      {plexWatch ? (
+                        <button onClick={playSelected} className="cta-primary">Play</button>
+                      ) : (
+                        <button onClick={() => nav(`/player/${id}`)} className="cta-primary">Play</button>
+                      )}
+                      <button className="cta-ghost" title="Add to My List">Add</button>
+                      <button className="cta-ghost" title="Mark Watched">Watched</button>
+                    </div>
+                    <div className="text-sm text-neutral-300 mb-3 flex flex-wrap items-center gap-2">
+                      {year && <span className="chip">{year}</span>}
+                      {meta.runtime ? <span className="chip">{meta.runtime} min</span> : null}
+                      {meta.rating && <span className="chip">{meta.rating}</span>}
+                      {badges.map((b)=> <span key={b} className="chip">{b}</span>)}
+                    </div>
+                    {overview && <p className="max-w-3xl text-neutral-300 mb-2">{overview}</p>}
+                    {/* Media info toggle if we have Plex tech */}
+                    {versions.length>0 && (
+                      <div className="mt-2">
+                        <button className="text-sm text-neutral-300 hover:text-white underline" onClick={()=> setShowMediaInfo(v=>!v)}>
+                          {showMediaInfo ? 'Hide media info' : 'Show media info'}
+                        </button>
+                        {showMediaInfo && (
+                          <div className="mt-2 text-sm text-neutral-300">
+                            <div className="mb-2">
+                              <VersionSelector versions={versions} active={activeVersion} onSelect={(id)=> setActiveVersion(id)} />
+                            </div>
+                            <div className="mb-2">
+                              <span className="meta-label mr-2">Audio:</span>
+                              {(audioTracks||[]).map((a,i)=> <span key={i} className="chip">{a.label}</span>)}
+                            </div>
+                            <div className="mb-2">
+                              <span className="meta-label mr-2">Subtitles:</span>
+                              {(subtitleTracks||[]).map((s,i)=> <span key={i} className="chip">{s.label}</span>)}
+                            </div>
+                            <TechnicalChips info={{
+                              rating: meta.rating,
+                              runtimeMin: meta.runtime,
+                              videoCodec: tech.videoCodec, videoProfile: tech.videoProfile, resolution: tech.resolution,
+                              bitrateKbps: tech.bitrateKbps, audioCodec: tech.audioCodec, audioChannels: tech.audioChannels,
+                              fileSizeMB: tech.fileSizeMB, subsCount: tech.subsCount,
+                            }} />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-sm text-neutral-300 mb-3">
-                  {meta.rating && <span className="chip">{meta.rating}</span>}
-                  {meta.runtime ? <span className="chip">{meta.runtime} min</span> : null}
-                  {badges.map((b)=> <span key={b} className="chip">{b}</span>)}
+                  {/* Right column */}
+                  <div className="hero-col-right right-list hidden md:block md:absolute md:right-6 md:bottom-4 md:max-w-[40vw]">
+                    {cast.length>0 && (
+                      <div className="mb-3">
+                        <div className="meta-label mb-1">Cast</div>
+                        <div className="flex flex-wrap gap-2 max-w-xl">
+                          {cast.slice(0,6).map((c,i)=>(
+                            <button key={i} onClick={()=> { setPersonId(c.id); setPersonName(c.name); setPersonOpen(true); }} className="underline text-neutral-200 hover:text-white">
+                              {c.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {meta.genres && meta.genres.length>0 && (
+                      <div className="mb-3">
+                        <div className="meta-label mb-1">Genres</div>
+                        <div className="flex flex-wrap gap-2">
+                          {meta.genres.map((g,i)=>(<span key={i} className="chip">{g}</span>))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="text-sm text-neutral-300">
-                  {meta.genres && <div className="mb-1">Genres: <span className="font-medium text-white">{meta.genres.join(', ')}</span></div>}
-                  {overview && <p className="max-w-3xl">{overview}</p>}
-                  <VersionSelector versions={versions} active={activeVersion} onSelect={(id)=> setActiveVersion(id)} />
-                  {(audioTracks.length>0 || subtitleTracks.length>0) && (
-                    <TrackPicker audios={audioTracks} subs={subtitleTracks} audioActive={activeAudio} subActive={activeSub} onAudio={setActiveAudio} onSub={setActiveSub} />
-                  )}
-                  <TechnicalChips info={{
-                    rating: meta.rating,
-                    runtimeMin: meta.runtime,
-                    videoCodec: tech.videoCodec, videoProfile: tech.videoProfile, resolution: tech.resolution,
-                    bitrateKbps: tech.bitrateKbps, audioCodec: tech.audioCodec, audioChannels: tech.audioChannels,
-                    fileSizeMB: tech.fileSizeMB, subsCount: tech.subsCount,
-                  }} />
-                  {!plexWatch && plexDetailsUrl && (
-                    <div className="mt-3"><a href={plexDetailsUrl} target="_blank" rel="noreferrer" className="px-4 py-2 rounded-md bg-brand hover:bg-brand-600 text-white font-semibold">Open in Plex</a></div>
-                  )}
                 </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
       <div className="page-gutter py-6 space-y-6">
         {seasons.length>0 && (
           <div className="flex items-center gap-3">

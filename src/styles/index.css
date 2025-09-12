@@ -48,14 +48,13 @@ html, body, #root { overflow-x: hidden; }
 /* Details hero layout */
 @layer components {
   .hero-overlay { @apply absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent; }
-  /* Modern Netflix-like hero info: light scrim, no heavy glass */
+  /* Modern Netflix-like hero info: light scrim, no heavy box */
   .hero-info { position: relative; padding: 1.25rem; padding-left: 1.5rem; padding-right: 1.5rem; }
   @media (min-width: 768px) { .hero-info { padding: 2rem; } }
-  .hero-scrim { position: absolute; inset: 0; left: -1rem; right: auto; width: min(860px, 90vw); z-index: 5;
-    background: linear-gradient(90deg, rgba(8,8,8,0.65) 0%, rgba(8,8,8,0.45) 45%, rgba(8,8,8,0.20) 75%, rgba(8,8,8,0.0) 100%);
+  .hero-scrim { position: absolute; inset: 0; z-index: 5;
+    background: linear-gradient(90deg, rgba(8,8,8,0.80) 0%, rgba(8,8,8,0.55) 40%, rgba(8,8,8,0.22) 68%, rgba(8,8,8,0.0) 85%);
     backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%);
-    border-radius: 20px; border: 1px solid rgba(255,255,255,0.06);
-    box-shadow: 0 24px 60px rgba(0,0,0,.45);
+    border: 0;
   }
   .hero-content { position: relative; z-index: 10; }
   .title-shadow { text-shadow: 0 6px 24px rgba(0,0,0,.8), 0 2px 8px rgba(0,0,0,.6); }
@@ -78,4 +77,13 @@ html, body, #root { overflow-x: hidden; }
   /* New: fade the hero background itself (image/video) so it blends into page */
   .hero-bg { position: absolute; inset: 0; z-index: 0; }
   .hero-bg { -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 100%); mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 100%); -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+
+  /* Hero grid layout */
+  .hero-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+  @media (min-width: 768px) { .hero-grid { grid-template-columns: repeat(12,minmax(0,1fr)); gap: 1.25rem; } }
+  .hero-col-left { grid-column: 1 / -1; }
+  .hero-col-right { grid-column: 1 / -1; }
+  @media (min-width: 768px) { .hero-col-left { grid-column: span 7 / span 7; } .hero-col-right { grid-column: span 5 / span 5; } }
+  .meta-label { @apply text-neutral-400 text-xs uppercase tracking-wider; }
+  .right-list { @apply text-sm text-neutral-300; }
 }
