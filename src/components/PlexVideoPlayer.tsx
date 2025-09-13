@@ -47,7 +47,7 @@ export default function PlexVideoPlayer({
     const video = videoRef.current;
     if (!video || !src) return;
 
-    console.log('PlexVideoPlayer: Setting up player for URL:', src);
+    // console.log('PlexVideoPlayer: Setting up player for URL:', src);
 
     const setupPlayer = () => {
       // Reset ready state when setting up new player
@@ -55,7 +55,7 @@ export default function PlexVideoPlayer({
 
       // Clean up previous HLS instance
       if (hlsRef.current) {
-        console.log('Cleaning up previous HLS instance');
+        // console.log('Cleaning up previous HLS instance');
         try {
           hlsRef.current.stopLoad();
           hlsRef.current.detachMedia();
@@ -68,7 +68,7 @@ export default function PlexVideoPlayer({
 
       // Clean up previous DASH instance
       if (dashRef.current) {
-        console.log('Cleaning up previous DASH instance');
+        // console.log('Cleaning up previous DASH instance');
         try {
           dashRef.current.reset();
         } catch (e) {
@@ -86,11 +86,11 @@ export default function PlexVideoPlayer({
       const isDash = src.includes('.mpd');
       const isHls = src.includes('.m3u8');
 
-      console.log('Stream type:', isDash ? 'DASH' : isHls ? 'HLS' : 'Direct');
+      // console.log('Stream type:', isDash ? 'DASH' : isHls ? 'HLS' : 'Direct');
 
       if (isDash) {
         // Use DASH.js for DASH streams
-        console.log('Using DASH.js for:', src);
+        // console.log('Using DASH.js for:', src);
         const dash = dashjs.MediaPlayer().create();
 
         // Configure DASH player
@@ -124,7 +124,7 @@ export default function PlexVideoPlayer({
 
         // Handle DASH events
         dash.on(dashjs.MediaPlayer.events.MANIFEST_LOADED, () => {
-          console.log('DASH manifest loaded');
+          // console.log('DASH manifest loaded');
           if (!isReady) {
             setIsReady(true);
             onReady?.();
@@ -149,12 +149,12 @@ export default function PlexVideoPlayer({
         dashRef.current = dash;
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         // Safari native HLS support
-        console.log('Using native HLS support');
+        // console.log('Using native HLS support');
         video.src = src;
         video.load();
       } else if (Hls.isSupported()) {
         // Use HLS.js for other browsers
-        console.log('Using HLS.js for:', src);
+        // console.log('Using HLS.js for:', src);
         const hls = new Hls({
           debug: false,
           enableWorker: true,
@@ -174,7 +174,7 @@ export default function PlexVideoPlayer({
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          console.log('HLS manifest parsed');
+          // console.log('HLS manifest parsed');
           if (!isReady) {
             setIsReady(true);
             onReady?.();
@@ -208,7 +208,7 @@ export default function PlexVideoPlayer({
             }
           } else if (data.details === 'bufferStalledError') {
             // Handle buffer stall
-            console.log('Buffer stalled, attempting recovery');
+            // console.log('Buffer stalled, attempting recovery');
             hls.startLoad();
           }
         });
@@ -216,7 +216,7 @@ export default function PlexVideoPlayer({
         hlsRef.current = hls;
       } else {
         // Fallback to direct playback
-        console.log('HLS not supported, trying direct playback');
+        // console.log('HLS not supported, trying direct playback');
         video.src = src;
         video.load();
       }
@@ -226,7 +226,7 @@ export default function PlexVideoPlayer({
 
     // Event listeners
     const handleLoadedMetadata = () => {
-      console.log('Video metadata loaded');
+      // console.log('Video metadata loaded');
       if (!isReady) {
         setIsReady(true);
         onReady?.();
@@ -328,7 +328,9 @@ export default function PlexVideoPlayer({
     if (!video || !isReady) return;
     
     if (playing) {
-      video.play().catch(e => console.warn('Play failed:', e));
+      video.play().catch(e => {
+        console.warn('Play failed:', e);
+      });
     } else {
       video.pause();
     }

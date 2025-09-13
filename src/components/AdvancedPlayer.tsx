@@ -16,6 +16,8 @@ import {
   plexUpdateSubtitleStream,
   plexTranscodeImageUrl,
   plexDirectPlayUrl,
+  plexStopTranscodeSession,
+  plexKillAllTranscodeSessions,
 } from '@/services/plex_player';
 import {
   canDirectPlay,
@@ -240,14 +242,14 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
           subtitleStreamID: selectedSubtitleStream || undefined,
         });
 
-        console.log('Initial Plex decision:', plexDecision);
+        // console.log('Initial Plex decision:', plexDecision);
 
         // Generate stream URL based on actual Plex decision
         let url: string;
         if (plexDecision.canDirectPlay && meta.Media?.[0]?.Part?.[0]?.key) {
           // Direct play URL
           url = plexDirectPlayUrl(plexConfig, meta.Media[0].Part[0].key);
-          console.log('Using direct play based on Plex decision');
+          // console.log('Using direct play based on Plex decision');
         } else {
           // Transcode URL with actual Plex decision
           url = plexStreamUrl(plexConfig, itemId, {
@@ -259,15 +261,15 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
             audioStreamID: selectedAudioStream || undefined,
             subtitleStreamID: selectedSubtitleStream || undefined,
           });
-          console.log('Using stream URL with Plex decision:', {
-            quality,
-            willDirectStream: plexDecision.willDirectStream,
-            willTranscode: plexDecision.willTranscode,
-          });
+          // console.log('Using stream URL with Plex decision:', {
+          //   quality,
+          //   willDirectStream: plexDecision.willDirectStream,
+          //   willTranscode: plexDecision.willTranscode,
+          // });
         }
 
-        console.log('Final stream URL:', url);
-        console.log('Metadata:', meta);
+        // console.log('Final stream URL:', url);
+        // console.log('Metadata:', meta);
         setStreamUrl(url);
         
         // Load play queue for episodes
@@ -401,12 +403,16 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
   // Quality change handler
   const handleQualityChange = useCallback(async (newQuality: string | number) => {
     if (!metadata || !itemId) return;
-    
+
     try {
       const currentPos = currentTime;
       setQuality(newQuality);
       localStorage.setItem('player_quality', newQuality.toString());
-      
+
+      // Stop existing transcode session before starting new one
+      // console.log('Stopping existing transcode sessions before quality change...');
+      await plexKillAllTranscodeSessions(plexConfig);
+
       // Determine stream decision
       const decision = getStreamDecision(metadata, {
         quality: newQuality,
@@ -426,21 +432,21 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
         subtitleStreamID: selectedSubtitleStream || undefined,
       });
 
-      console.log('Plex actual decision:', plexDecision);
+      // console.log('Plex actual decision:', plexDecision);
 
       // Generate new stream URL based on actual Plex decision
       let url: string;
       if (plexDecision.canDirectPlay && metadata.Media?.[0]?.Part?.[0]?.key) {
         url = plexDirectPlayUrl(plexConfig, metadata.Media[0].Part[0].key);
-        console.log('Using direct play based on Plex decision');
+        // console.log('Using direct play based on Plex decision');
       } else {
         const bitrateValue = newQuality === 'original' ? undefined : Number(newQuality);
-        console.log('Quality change request:', {
-          newQuality,
-          bitrateValue,
-          plexDecision,
-          currentStreamUrl: streamUrl,
-        });
+        // console.log('Quality change request:', {
+        //   newQuality,
+        //   bitrateValue,
+        //   plexDecision,
+        //   currentStreamUrl: streamUrl,
+        // });
 
         // Use actual Plex decision values
         url = plexStreamUrl(plexConfig, itemId, {
@@ -453,7 +459,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
           subtitleStreamID: selectedSubtitleStream || undefined,
           forceReload: true,
         });
-        console.log('Generated stream URL based on Plex decision:', url);
+        // console.log('Generated stream URL based on Plex decision:', url);
       }
       
       setStreamUrl(url);
@@ -634,7 +640,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
   }, []);
 
   const handleReady = useCallback(() => {
-    console.log('Player ready');
+    // console.log('Player ready');
     setBuffering(false);
   }, []);
 
@@ -700,22 +706,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
   const canStreamDirect = metadata ? canDirectStream(metadata) : false;
 
   return (
-    <div ref={containerRef} className="fixed inset-0 bg-black">
-      {/* Debug info */}
-      {streamUrl && (
-        <div className="absolute top-0 left-0 z-50 bg-black/80 text-white text-xs p-2 max-w-xl">
-          <div>Stream URL: {streamUrl.substring(0, 100)}...</div>
-          <button 
-            className="mt-1 px-2 py-1 bg-blue-600 rounded text-xs"
-            onClick={() => {
-              // Try opening in new tab to test if URL works
-              window.open(streamUrl, '_blank');
-            }}
-          >
-            Test in New Tab
-          </button>
-        </div>
-      )}
+    <div ref={containerRef} className="fixed inset-0 bg-black z-50">
       {streamUrl && (
         <div className="absolute inset-0">
           <PlexVideoPlayer

@@ -185,7 +185,7 @@ export async function plexUniversalDecision(cfg: PlexConfig, itemId: string, opt
       audioDecision: container.Metadata?.[0]?.Media?.[0]?.Part?.[0]?.Stream?.[1]?.decision,
     };
 
-    console.log('Plex Decision:', decision);
+    // console.log('Plex Decision:', decision);
 
     // Determine actual playback method based on decision codes
     const canDirectPlay = decision.directPlayDecisionCode === 1000;
@@ -225,13 +225,10 @@ export function plexStreamUrl(cfg: PlexConfig, itemId: string, options?: {
     ...options,
     protocol: options?.protocol || 'hls',
   });
-  
-  // Generate new session if forcing reload (quality change)
-  if (options?.forceReload) {
-    // Clear old session to force new transcode
-    sessionStorage.removeItem('plex_session_id');
-  }
-  
+
+  // Keep the same session ID for quality changes - Plex will handle the switch
+  // The stop endpoint will terminate the old transcode
+
   const headers = getXPlexHeaders(cfg.token);
   
   // Build query params
@@ -251,13 +248,13 @@ export function plexStreamUrl(cfg: PlexConfig, itemId: string, options?: {
   const ext = options?.protocol === 'hls' ? 'm3u8' : 'mpd';
   const url = `${cfg.baseUrl}/video/:/transcode/universal/start.${ext}?${params}`;
   
-  console.log('Generated stream URL with params:', {
-    directPlay: props.directPlay,
-    directStream: props.directStream,
-    maxVideoBitrate: props.maxVideoBitrate,
-    protocol: props.protocol,
-    session: props.session,
-  });
+  // console.log('Generated stream URL with params:', {
+  //   directPlay: props.directPlay,
+  //   directStream: props.directStream,
+  //   maxVideoBitrate: props.maxVideoBitrate,
+  //   protocol: props.protocol,
+  //   session: props.session,
+  // });
   
   return url;
 }
@@ -334,6 +331,46 @@ export async function plexUpdateSubtitleStream(cfg: PlexConfig, partId: string, 
   return res;
 }
 
+// Stop transcode session
+export async function plexStopTranscodeSession(cfg: PlexConfig, sessionKey?: string) {
+  const headers = getXPlexHeaders(cfg.token);
+  const params = new URLSearchParams({
+    session: sessionKey || getSessionId(),
+    ...headers,
+  });
+
+  const url = `${cfg.baseUrl}/video/:/transcode/universal/stop?${params}`;
+
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!res.ok) {
+      console.warn('Failed to stop transcode session:', res.status);
+    } else {
+      // console.log('Stopped transcode session:', sessionKey || getSessionId());
+    }
+    return res;
+  } catch (error) {
+    console.error('Error stopping transcode session:', error);
+  }
+}
+
+// Kill all transcode sessions for this client
+export async function plexKillAllTranscodeSessions(cfg: PlexConfig) {
+  // Just stop our current session using the session ID
+  // This is simpler and more reliable than querying all sessions
+  try {
+    await plexStopTranscodeSession(cfg);
+  } catch (error) {
+    console.error('Error killing transcode sessions:', error);
+  }
+}
+
 // Transcode image URL
 export function plexTranscodeImageUrl(cfg: PlexConfig, path: string, width: number, height: number) {
   const params = new URLSearchParams({
@@ -343,6 +380,6 @@ export function plexTranscodeImageUrl(cfg: PlexConfig, path: string, width: numb
     upscale: '1',
     'X-Plex-Token': cfg.token,
   });
-  
+
   return `${cfg.baseUrl}/photo/:/transcode?${params}&url=${encodeURIComponent(path)}`;
 }
