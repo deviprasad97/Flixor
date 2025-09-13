@@ -200,3 +200,150 @@ export async function plexFindByGuid(cfg: PlexConfig, guid: string, typeNum?: 1|
     return res.json();
   });
 }
+
+// Player-specific Plex API methods
+export async function plexUniversalDecision(cfg: PlexConfig, itemId: string, options?: {
+  maxVideoBitrate?: number;
+  autoAdjustQuality?: boolean;
+  videoResolution?: string;
+  directPlay?: boolean;
+  directStream?: boolean;
+}) {
+  const params = new URLSearchParams({
+    hasMDE: '1',
+    path: `/library/metadata/${itemId}`,
+    mediaIndex: '0',
+    partIndex: '0',
+    protocol: 'dash',
+    fastSeek: '1',
+    directPlay: options?.directPlay !== false ? '1' : '0',
+    directStream: options?.directStream !== false ? '1' : '0',
+    subtitleSize: '100',
+    audioBoost: '100',
+    session: Math.random().toString(36).substring(2, 15), // Add session ID
+    'X-Plex-Client-Identifier': 'plex-mpv-client-web', // Add client identifier
+    'X-Plex-Token': cfg.token,
+  });
+
+  if (options?.maxVideoBitrate) {
+    params.set('maxVideoBitrate', options.maxVideoBitrate.toString());
+  }
+  if (options?.autoAdjustQuality !== undefined) {
+    params.set('autoAdjustQuality', options.autoAdjustQuality ? '1' : '0');
+  } else {
+    params.set('autoAdjustQuality', '0'); // Default to 0
+  }
+  if (options?.videoResolution) {
+    params.set('videoResolution', options.videoResolution);
+  }
+
+  const url = `${cfg.baseUrl}/video/:/transcode/universal/decision?${params}`;
+  const res = await fetch(url, { 
+    method: 'GET', // Use GET instead of HEAD
+    headers: {
+      'Accept': 'application/json',
+      'X-Plex-Client-Identifier': 'plex-mpv-client-web',
+    }
+  });
+  if (!res.ok) throw new Error(`Plex decision error ${res.status}`);
+  return res;
+}
+
+export function plexStreamUrl(cfg: PlexConfig, itemId: string, options?: {
+  maxVideoBitrate?: number;
+  protocol?: 'dash' | 'hls';
+  directPlay?: boolean;
+  directStream?: boolean;
+  session?: string;
+}) {
+  const sessionId = options?.session || Math.random().toString(36).substring(2, 15);
+  const params = new URLSearchParams({
+    hasMDE: '1',
+    path: `/library/metadata/${itemId}`,
+    mediaIndex: '0',
+    partIndex: '0',
+    protocol: options?.protocol || 'dash',
+    fastSeek: '1',
+    directPlay: options?.directPlay !== false ? '1' : '0',
+    directStream: options?.directStream !== false ? '1' : '0',
+    subtitleSize: '100',
+    audioBoost: '100',
+    location: 'wan',
+    addDebugOverlay: '0',
+    autoAdjustQuality: '0',
+    session: sessionId,
+    'X-Plex-Client-Identifier': 'plex-mpv-client-web',
+    'X-Plex-Token': cfg.token,
+  });
+
+  if (options?.maxVideoBitrate) {
+    params.set('maxVideoBitrate', options.maxVideoBitrate.toString());
+  }
+
+  const ext = options?.protocol === 'hls' ? 'm3u8' : 'mpd';
+  return `${cfg.baseUrl}/video/:/transcode/universal/start.${ext}?${params}`;
+}
+
+export async function plexTimelineUpdate(cfg: PlexConfig, itemId: string, time: number, duration: number, state: 'playing' | 'paused' | 'stopped' | 'buffering') {
+  const params = new URLSearchParams({
+    ratingKey: itemId,
+    key: `/library/metadata/${itemId}`,
+    playbackTime: Math.floor(time).toString(),
+    duration: Math.floor(duration).toString(),
+    state,
+    'X-Plex-Token': cfg.token,
+  });
+
+  const url = `${cfg.baseUrl}/:/timeline?${params}`;
+  const res = await fetch(url);
+  if (!res.ok) console.warn('Timeline update failed:', res.status);
+  return res;
+}
+
+export async function plexPing(cfg: PlexConfig) {
+  const url = `${cfg.baseUrl}/:/ping?X-Plex-Token=${cfg.token}`;
+  const res = await fetch(url);
+  return res.ok;
+}
+
+export async function plexUpdateAudioStream(cfg: PlexConfig, partId: string, streamId: string) {
+  const params = new URLSearchParams({
+    audioStreamID: streamId,
+    allParts: '1',
+    'X-Plex-Token': cfg.token,
+  });
+
+  const url = `${cfg.baseUrl}/library/parts/${partId}?${params}`;
+  const res = await fetch(url, { method: 'PUT' });
+  if (!res.ok) throw new Error(`Failed to update audio stream: ${res.status}`);
+  return res;
+}
+
+export async function plexUpdateSubtitleStream(cfg: PlexConfig, partId: string, streamId: string) {
+  const params = new URLSearchParams({
+    subtitleStreamID: streamId,
+    allParts: '1',
+    'X-Plex-Token': cfg.token,
+  });
+
+  const url = `${cfg.baseUrl}/library/parts/${partId}?${params}`;
+  const res = await fetch(url, { method: 'PUT' });
+  if (!res.ok) throw new Error(`Failed to update subtitle stream: ${res.status}`);
+  return res;
+}
+
+export async function plexPlayQueue(cfg: PlexConfig, itemId: string) {
+  const params = new URLSearchParams({
+    type: 'video',
+    uri: `server://*/com.plexapp.plugins.library/library/metadata/${itemId}`,
+    includeChapters: '1',
+    includeMarkers: '1',
+    includeRelated: '1',
+    'X-Plex-Token': cfg.token,
+  });
+
+  const url = `${cfg.baseUrl}/playQueues?${params}`;
+  const res = await fetch(url, { method: 'POST', headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`Failed to create play queue: ${res.status}`);
+  return res.json();
+}

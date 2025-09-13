@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import PlayerChrome from '@/components/PlayerChrome';
 import WebPlayer from '@/components/WebPlayer';
+import AdvancedPlayer from '@/components/AdvancedPlayer';
 import { loadSettings } from '@/state/settings';
 import { plexImage, plexMetadata } from '@/services/plex';
 import { plexTranscodeMp4Url, plexTranscodeDashUrl, plexTimeline, plexMetadataWithMarkers } from '@/services/plex_stream';
@@ -192,33 +193,53 @@ export default function Player() {
 
   // @ts-ignore
   const isTauri = !!window.__TAURI__;
-  if (!isTauri && webUrl) {
-    const tParam = Number(qs.get('t') || 0);
-    return (
-      <WebPlayer
-        src={webUrl}
-        title={title || String(id)}
-        poster={poster}
-        startTime={isFinite(tParam) ? Math.max(0, tParam/1000) : undefined}
-        quality={quality}
-        qualityOptions={qualityOptions}
-        onQualityChange={(v) => setQuality(v)}
-        resolution={resolution}
-        resolutionOptions={resolutionOptions}
-        onResolutionChange={(v) => setResolution(v)}
-        markers={markers}
-        dash={isDash}
-        onProgress={(t, d, state) => { last.current = { t, d, state }; setCurrentTime(Math.floor(t)); setDuration(Math.floor(d)); }}
-        onBack={() => {
-          const s = loadSettings();
-          if (ratingKey && last.current) {
-            plexTimeline({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, ratingKey, (last.current.d||0)*1000, (last.current.t||0)*1000, 'paused').finally(()=> nav(-1));
-          } else { nav(-1); }
-        }}
-        nextLabel={next?.title}
-        onNext={() => handleAutoNext()}
-      />
-    );
+  if (!isTauri) {
+    // Check if we have Plex configuration for advanced player
+    const s = loadSettings();
+    const useAdvanced = qs.get('advanced') === 'true' || true; // Default to advanced player
+    
+    if (useAdvanced && s.plexBaseUrl && s.plexToken && ratingKey) {
+      // Use AdvancedPlayer for Plex content
+      return (
+        <AdvancedPlayer
+          plexConfig={{ baseUrl: s.plexBaseUrl, token: s.plexToken }}
+          itemId={ratingKey}
+          onBack={() => nav(-1)}
+          onNext={(nextId) => {
+            const url = `/player/${encodeURIComponent(`plex:${nextId}`)}`;
+            nav(url);
+          }}
+        />
+      );
+    } else if (webUrl) {
+      // Fallback to WebPlayer for non-Plex content or if advanced is disabled
+      const tParam = Number(qs.get('t') || 0);
+      return (
+        <WebPlayer
+          src={webUrl}
+          title={title || String(id)}
+          poster={poster}
+          startTime={isFinite(tParam) ? Math.max(0, tParam/1000) : undefined}
+          quality={quality}
+          qualityOptions={qualityOptions}
+          onQualityChange={(v) => setQuality(v)}
+          resolution={resolution}
+          resolutionOptions={resolutionOptions}
+          onResolutionChange={(v) => setResolution(v)}
+          markers={markers}
+          dash={isDash}
+          onProgress={(t, d, state) => { last.current = { t, d, state }; setCurrentTime(Math.floor(t)); setDuration(Math.floor(d)); }}
+          onBack={() => {
+            const s = loadSettings();
+            if (ratingKey && last.current) {
+              plexTimeline({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, ratingKey, (last.current.d||0)*1000, (last.current.t||0)*1000, 'paused').finally(()=> nav(-1));
+            } else { nav(-1); }
+          }}
+          nextLabel={next?.title}
+          onNext={() => handleAutoNext()}
+        />
+      );
+    }
   }
 
   return (

@@ -1,0 +1,60 @@
+/* Video Seek Slider Styles */
+@import 'react-video-seek-slider/styles.css';
+
+.ui-video-seek-slider {
+  height: 100%;
+}
+
+.ui-video-seek-slider .track {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.ui-video-seek-slider .track .main {
+  background: transparent;
+}
+
+.ui-video-seek-slider .track .main .connect {
+  background: rgb(239, 68, 68);
+  border-radius: 4px;
+}
+
+.ui-video-seek-slider .track .buffered {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+.ui-video-seek-slider .thumb .handler {
+  width: 16px;
+  height: 16px;
+  background: rgb(239, 68, 68);
+  border: 2px solid white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.ui-video-seek-slider .thumb .handler:hover {
+  transform: scale(1.2);
+}
+
+/* Preview tooltip */
+.ui-video-seek-slider .preview-tooltip {
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.ui-video-seek-slider .preview-tooltip img {
+  width: 160px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.ui-video-seek-slider .preview-tooltip .time {
+  color: white;
+  font-size: 12px;
+  text-align: center;
+  margin-top: 4px;
+}
