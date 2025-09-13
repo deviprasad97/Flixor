@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Hls from 'hls.js';
+import * as dashjs from 'dashjs';
 import { VideoSeekSlider } from 'react-video-seek-slider';
 import '../styles/player.css';
 
@@ -39,6 +40,7 @@ export default function PlexVideoPlayer({
   const internalVideoRef = useRef<HTMLVideoElement>(null);
   const videoRef = externalVideoRef || internalVideoRef;
   const hlsRef = useRef<Hls | null>(null);
+  const dashRef = useRef<dashjs.MediaPlayerClass | null>(null);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -50,8 +52,8 @@ export default function PlexVideoPlayer({
     const setupPlayer = () => {
       // Reset ready state when setting up new player
       setIsReady(false);
-      
-      // Clean up previous instance ALWAYS
+
+      // Clean up previous HLS instance
       if (hlsRef.current) {
         console.log('Cleaning up previous HLS instance');
         try {
@@ -63,13 +65,89 @@ export default function PlexVideoPlayer({
         }
         hlsRef.current = null;
       }
-      
+
+      // Clean up previous DASH instance
+      if (dashRef.current) {
+        console.log('Cleaning up previous DASH instance');
+        try {
+          dashRef.current.reset();
+        } catch (e) {
+          console.error('Error cleaning up DASH:', e);
+        }
+        dashRef.current = null;
+      }
+
       // Reset video element
       video.pause();
       video.removeAttribute('src');
       video.load();
 
-      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Determine stream type
+      const isDash = src.includes('.mpd');
+      const isHls = src.includes('.m3u8');
+
+      console.log('Stream type:', isDash ? 'DASH' : isHls ? 'HLS' : 'Direct');
+
+      if (isDash) {
+        // Use DASH.js for DASH streams
+        console.log('Using DASH.js for:', src);
+        const dash = dashjs.MediaPlayer().create();
+
+        // Configure DASH player
+        dash.updateSettings({
+          streaming: {
+            buffer: {
+              bufferTimeAtTopQuality: 30,
+              bufferPruningInterval: 10,
+              bufferToKeep: 20,
+              fastSwitchEnabled: true,
+            },
+            abr: {
+              autoSwitchBitrate: {
+                video: false, // We control quality manually
+              },
+            },
+            retryIntervals: {
+              MPD: 500,
+            },
+            retryAttempts: {
+              MPD: 3,
+            },
+          },
+          debug: {
+            logLevel: 1, // 0=none, 1=error, 2=warning, 3=info, 4=debug
+          },
+        });
+
+        // Initialize DASH player
+        dash.initialize(video, src, autoPlay);
+
+        // Handle DASH events
+        dash.on(dashjs.MediaPlayer.events.MANIFEST_LOADED, () => {
+          console.log('DASH manifest loaded');
+          if (!isReady) {
+            setIsReady(true);
+            onReady?.();
+          }
+        });
+
+        dash.on(dashjs.MediaPlayer.events.ERROR, (e: any) => {
+          console.error('DASH error:', e);
+          if (e.error && e.error.message) {
+            onError?.(`DASH Error: ${e.error.message}`);
+          }
+        });
+
+        dash.on(dashjs.MediaPlayer.events.BUFFER_EMPTY, () => {
+          onBuffering?.(true);
+        });
+
+        dash.on(dashjs.MediaPlayer.events.BUFFER_LOADED, () => {
+          onBuffering?.(false);
+        });
+
+        dashRef.current = dash;
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         // Safari native HLS support
         console.log('Using native HLS support');
         video.src = src;
@@ -227,7 +305,16 @@ export default function PlexVideoPlayer({
         }
         hlsRef.current = null;
       }
-      
+
+      if (dashRef.current) {
+        try {
+          dashRef.current.reset();
+        } catch (e) {
+          console.error('Error cleaning up DASH on unmount:', e);
+        }
+        dashRef.current = null;
+      }
+
       // Clean video element
       video.pause();
       video.removeAttribute('src');

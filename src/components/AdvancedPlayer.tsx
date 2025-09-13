@@ -232,7 +232,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
         // Call decision API to see what Plex will actually do
         const plexDecision = await plexUniversalDecision(plexConfig, itemId, {
           maxVideoBitrate: quality === 'original' ? undefined : Number(quality),
-          protocol: 'hls',
+          protocol: 'dash', // Use DASH like Plex Web for better codec support
           autoAdjustQuality: false,
           directPlay: decision.directPlay,
           directStream: decision.directStream,
@@ -252,7 +252,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
           // Transcode URL with actual Plex decision
           url = plexStreamUrl(plexConfig, itemId, {
             maxVideoBitrate: quality === 'original' ? undefined : Number(quality),
-            protocol: 'hls',
+            protocol: 'dash', // Use DASH for better codec support
             autoAdjustQuality: false,
             directPlay: false,
             directStream: plexDecision.willDirectStream || false,
@@ -418,7 +418,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
       // First, call decision API to see what Plex will actually do
       const plexDecision = await plexUniversalDecision(plexConfig, itemId, {
         maxVideoBitrate: newQuality === 'original' ? undefined : Number(newQuality),
-        protocol: 'hls',
+        protocol: 'dash', // Use DASH for better codec support
         autoAdjustQuality: false,
         directPlay: decision.directPlay,
         directStream: decision.directStream,
@@ -445,7 +445,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
         // Use actual Plex decision values
         url = plexStreamUrl(plexConfig, itemId, {
           maxVideoBitrate: bitrateValue,
-          protocol: 'hls',
+          protocol: 'dash', // Use DASH for better codec support
           autoAdjustQuality: false,
           directPlay: false, // Plex already decided not to direct play
           directStream: plexDecision.willDirectStream || false,
