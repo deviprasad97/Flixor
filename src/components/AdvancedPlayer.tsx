@@ -363,6 +363,13 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
         case ' ':
         case 'k':
           e.preventDefault();
+          if (video) {
+            if (playing) {
+              video.pause();
+            } else {
+              video.play().catch(err => console.warn('Play failed:', err));
+            }
+          }
           setPlaying(p => !p);
           break;
         case 'ArrowLeft':
@@ -838,7 +845,17 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
                 {/* Play/Pause */}
                 <button
                   className="p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-                  onClick={() => setPlaying(!playing)}
+                  onClick={() => {
+                    const video = videoRef.current;
+                    if (video) {
+                      if (playing) {
+                        video.pause();
+                      } else {
+                        video.play().catch(e => console.warn('Play failed:', e));
+                      }
+                    }
+                    setPlaying(!playing);
+                  }}
                 >
                   {playing ? (
                     <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">

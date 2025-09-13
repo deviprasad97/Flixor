@@ -93,14 +93,16 @@ export default function PlexVideoPlayer({
         // console.log('Using DASH.js for:', src);
         const dash = dashjs.MediaPlayer().create();
 
-        // Configure DASH player
+        // Configure DASH player with more aggressive buffer management
         dash.updateSettings({
           streaming: {
             buffer: {
-              bufferTimeAtTopQuality: 30,
+              bufferTimeAtTopQuality: 20, // Reduced from 30
               bufferPruningInterval: 10,
-              bufferToKeep: 20,
+              bufferToKeep: 10, // Reduced from 20
+              bufferAheadToKeep: 20, // Keep less ahead
               fastSwitchEnabled: true,
+              stallThreshold: 0.5,
             },
             abr: {
               autoSwitchBitrate: {
@@ -112,6 +114,10 @@ export default function PlexVideoPlayer({
             },
             retryAttempts: {
               MPD: 3,
+            },
+            gaps: {
+              jumpGaps: true,
+              jumpLargeGaps: true,
             },
           },
           debug: {
@@ -159,11 +165,12 @@ export default function PlexVideoPlayer({
           debug: false,
           enableWorker: true,
           lowLatencyMode: false,
-          maxBufferLength: 30,
-          maxMaxBufferLength: 600,
-          maxBufferSize: 60 * 1000 * 1000, // 60 MB
+          maxBufferLength: 20, // Reduced from 30
+          maxMaxBufferLength: 120, // Reduced from 600
+          maxBufferSize: 30 * 1000 * 1000, // Reduced from 60 MB to 30 MB
           maxBufferHole: 0.5,
           startLevel: -1, // Auto
+          backBufferLength: 30, // Clear back buffer to free memory
           xhrSetup: (xhr: XMLHttpRequest, url: string) => {
             // Add credentials for CORS
             xhr.withCredentials = false;
@@ -326,7 +333,7 @@ export default function PlexVideoPlayer({
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !isReady) return;
-    
+
     if (playing) {
       video.play().catch(e => {
         console.warn('Play failed:', e);
@@ -334,7 +341,7 @@ export default function PlexVideoPlayer({
     } else {
       video.pause();
     }
-  }, [playing, isReady]);
+  }, [playing, isReady, videoRef]);
 
   // Handle volume
   useEffect(() => {
