@@ -97,7 +97,7 @@ export default function Library() {
   const filtered = useMemo(() => items.filter((it) => it.title.toLowerCase().includes(query.toLowerCase())), [items, query]);
 
   return (
-    <div className="bg-home-gradient pb-8 pt-16">
+    <div className="pb-8">
       {!needsPlex && sections.length>0 ? (
         <div className="page-gutter pt-6 space-y-3">
           <div className="flex flex-wrap gap-2">

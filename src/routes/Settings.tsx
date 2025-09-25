@@ -21,7 +21,7 @@ export default function Settings() {
   }, [plexUrl, plexToken, tmdbKey, traktKey, plexTvToken]);
 
   return (
-    <div className="bg-home-gradient min-h-screen pt-16">
+    <div className="min-h-screen">
       <div className="max-w-3xl mx-auto p-6 space-y-8 pt-6">
       <section>
         <h2 className="text-xl font-semibold mb-2">Accounts</h2>

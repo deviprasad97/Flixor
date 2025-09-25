@@ -424,7 +424,7 @@ export default function Details() {
   };
 
   return (
-    <div className="bg-home-gradient">
+    <div>
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
       {/* Hero billboard full-bleed */}
       <div className="bleed relative h-[64vh] md:h-[72vh]">

@@ -19,6 +19,8 @@ html, body, #root { overflow-x: hidden; }
 
 /* Utilities for Netflix-style UI */
 @layer components {
+  /* Fixed, global background layer (applied once in App) */
+  .app-bg-fixed { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
   /* Top navigation background that fades with scroll */
   .nav-bg {
     position: absolute; inset: 0; pointer-events: none; z-index: 0;

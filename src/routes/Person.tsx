@@ -36,7 +36,7 @@ export default function Person() {
     load();
   }, [id]);
   return (
-    <div className="bg-home-gradient pb-10">
+    <div className="pb-10">
       <div className="page-gutter pt-6"><h1 className="text-2xl font-semibold">{name || 'Person'}</h1></div>
       {rows.map(r => <Row key={r.title} title={r.title} items={r.items} onItemClick={(id)=> nav(`/details/${encodeURIComponent(id)}`)} />)}
     </div>
