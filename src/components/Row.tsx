@@ -1,6 +1,7 @@
 import LandscapeCard from './LandscapeCard';
 import ContinueCard from './ContinueCard';
 import { useSearchParams } from 'react-router-dom';
+import { useMemo } from 'react';
 
 type Item = { id: string; title: string; image: string; badge?: string; progress?: number };
 
@@ -12,6 +13,19 @@ export default function Row({ title, items, variant = 'default', onItemClick, br
   browseKey?: string;
 }) {
   const [params, setParams] = useSearchParams();
+  // Deduplicate by stable item id to avoid React key collisions
+  const uniqueItems = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Item[] = [];
+    for (const it of items || []) {
+      const key = it?.id;
+      if (!key) continue;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(it);
+    }
+    return out;
+  }, [items]);
   return (
     <section className="py-2 my-5">
       <div className="page-gutter">
@@ -34,7 +48,7 @@ export default function Row({ title, items, variant = 'default', onItemClick, br
           <div className="row-edge no-scrollbar overflow-x-auto" style={{ padding: '12px 0 16px 0' }}>
             <div className="flex gap-8 pb-4 w-max">
               
-              {items.map((i) => variant === 'continue' ? (
+              {uniqueItems.map((i) => variant === 'continue' ? (
                 <ContinueCard key={i.id} id={i.id} title={i.title} image={i.image!} progress={i.progress ?? 0} onClick={(id) => onItemClick?.(id)} />
               ) : (
                 <LandscapeCard key={i.id} id={i.id} title={i.title} image={i.image!} badge={i.badge} onClick={() => onItemClick?.(i.id)} />

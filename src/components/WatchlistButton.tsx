@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { plexTvWatchlist, plexTvAddToWatchlist, plexTvRemoveFromWatchlist } from '@/services/plextv';
 import { traktAddToWatchlist, traktRemoveFromWatchlist, getTraktTokens } from '@/services/trakt';
 
@@ -26,10 +26,30 @@ export default function WatchlistButton({
   const [isInList, setIsInList] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const [visible, setVisible] = useState(false);
+
+  // Defer watchlist check until button is near viewport
+  useEffect(() => {
+    const el = btnRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          io.disconnect();
+        }
+      },
+      { root: null, rootMargin: '200px', threshold: 0 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   useEffect(() => {
+    if (!visible) return;
     checkWatchlistStatus();
-  }, [itemId]);
+  }, [itemId, visible]);
 
   async function checkWatchlistStatus() {
     setChecking(true);
@@ -46,7 +66,8 @@ export default function WatchlistButton({
       });
       setIsInList(found);
     } catch (err) {
-      console.error('Failed to check watchlist status:', err);
+      // Reduce log spam; this can hit rate limits. UI will just hide the button until data loads.
+      console.warn('Watchlist status unavailable:', err);
     } finally {
       setChecking(false);
     }
@@ -139,6 +160,7 @@ export default function WatchlistButton({
   if (variant === 'button') {
     return (
       <button
+        ref={btnRef}
         onClick={handleToggle}
         disabled={loading}
         className={`inline-flex items-center px-5 py-2.5 text-sm md:text-base font-medium rounded-md transition-all ${
@@ -166,6 +188,7 @@ export default function WatchlistButton({
   // Icon variant
   return (
     <button
+      ref={btnRef}
       onClick={handleToggle}
       disabled={loading}
       className={`w-10 h-10 flex items-center justify-center bg-black/60 rounded-full hover:bg-black/80 transition-all ${
