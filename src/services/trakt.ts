@@ -1,5 +1,14 @@
-import { invoke } from '@tauri-apps/api/core';
 import { loadSettings, saveSettings } from '@/state/settings';
+
+// Dynamic import for Tauri to avoid errors in non-Tauri contexts
+async function getInvoke() {
+  // @ts-ignore
+  if (window.__TAURI__) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke;
+  }
+  throw new Error('Tauri API not available');
+}
 
 const TRAKT = 'https://api.trakt.tv';
 const CLIENT_ID = '4ab0ead6d5510bf39180a5e1dd7b452f5ad700b7794564befdd6bca56e0f7ce4';
@@ -89,10 +98,12 @@ export interface TraktEpisode {
 
 // Authentication
 export async function traktRequestDeviceCode(): Promise<TraktDeviceCode> {
+  const invoke = await getInvoke();
   return invoke('trakt_device_code', { clientId: CLIENT_ID });
 }
 
 export async function traktPollForToken(deviceCode: string): Promise<TraktTokens | null> {
+  const invoke = await getInvoke();
   return invoke('trakt_poll_token', {
     deviceCode,
     clientId: CLIENT_ID,
@@ -101,6 +112,7 @@ export async function traktPollForToken(deviceCode: string): Promise<TraktTokens
 }
 
 export async function traktRefreshToken(refreshToken: string): Promise<TraktTokens> {
+  const invoke = await getInvoke();
   return invoke('trakt_refresh_token', {
     refreshToken,
     clientId: CLIENT_ID,
@@ -109,6 +121,7 @@ export async function traktRefreshToken(refreshToken: string): Promise<TraktToke
 }
 
 export async function traktRevokeToken(accessToken: string): Promise<void> {
+  const invoke = await getInvoke();
   return invoke('trakt_revoke_token', {
     accessToken,
     clientId: CLIENT_ID,
@@ -118,74 +131,90 @@ export async function traktRevokeToken(accessToken: string): Promise<void> {
 
 // User
 export async function traktGetUserProfile(accessToken: string): Promise<TraktUser> {
+  const invoke = await getInvoke();
   return invoke('trakt_user_profile', { accessToken });
 }
 
 export async function traktGetUserSettings(accessToken: string): Promise<any> {
+  const invoke = await getInvoke();
   return invoke('trakt_user_settings', { accessToken });
 }
 
 // Scrobbling
 export async function traktScrobbleStart(accessToken: string, item: TraktScrobble): Promise<any> {
+  const invoke = await getInvoke();
   return invoke('trakt_scrobble_start', { accessToken, item });
 }
 
 export async function traktScrobblePause(accessToken: string, item: TraktScrobble): Promise<any> {
+  const invoke = await getInvoke();
   return invoke('trakt_scrobble_pause', { accessToken, item });
 }
 
 export async function traktScrobbleStop(accessToken: string, item: TraktScrobble): Promise<any> {
+  const invoke = await getInvoke();
   return invoke('trakt_scrobble_stop', { accessToken, item });
 }
 
 // History
 export async function traktGetHistory(accessToken: string, type?: 'movies' | 'shows', limit?: number): Promise<any[]> {
+  const invoke = await getInvoke();
   return invoke('trakt_history', { accessToken, type, limit });
 }
 
 export async function traktAddToHistory(accessToken: string, items: any[]): Promise<any> {
+  const invoke = await getInvoke();
   return invoke('trakt_history_add', { accessToken, items });
 }
 
 export async function traktRemoveFromHistory(accessToken: string, items: any[]): Promise<any> {
+  const invoke = await getInvoke();
   return invoke('trakt_history_remove', { accessToken, items });
 }
 
 // Watchlist
 export async function traktGetWatchlist(accessToken: string, type?: 'movies' | 'shows'): Promise<any[]> {
+  const invoke = await getInvoke();
   return invoke('trakt_watchlist', { accessToken, type });
 }
 
 export async function traktAddToWatchlist(accessToken: string, items: any[]): Promise<any> {
+  const invoke = await getInvoke();
   return invoke('trakt_watchlist_add', { accessToken, items });
 }
 
 export async function traktRemoveFromWatchlist(accessToken: string, items: any[]): Promise<any> {
+  const invoke = await getInvoke();
   return invoke('trakt_watchlist_remove', { accessToken, items });
 }
 
 // Progress
 export async function traktGetProgress(accessToken: string, type: 'shows', sort?: string): Promise<any[]> {
+  const invoke = await getInvoke();
   return invoke('trakt_progress', { accessToken, type, sort });
 }
 
 // Recommendations
 export async function traktGetRecommendations(accessToken: string, type: 'movies' | 'shows', limit?: number): Promise<any[]> {
+  const invoke = await getInvoke();
   return invoke('trakt_recommendations', { accessToken, type, limit });
 }
 
 // Search
 export async function traktSearch(query: string, type?: 'movie' | 'show' | 'episode', limit?: number): Promise<any[]> {
+  const invoke = await getInvoke();
   return invoke('trakt_search', { query, type, limit, clientId: CLIENT_ID });
 }
 
 // Trending (existing, updated)
 export async function traktTrending(type: 'movies'|'shows' = 'movies', limit?: number): Promise<any[]> {
+  const invoke = await getInvoke();
   return invoke('trakt_trending', { kind: type, clientId: CLIENT_ID, limit });
 }
 
 // Popular
 export async function traktPopular(type: 'movies' | 'shows', limit?: number): Promise<any[]> {
+  const invoke = await getInvoke();
   return invoke('trakt_popular', { type, clientId: CLIENT_ID, limit });
 }
 
