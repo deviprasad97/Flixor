@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { loadSettings, saveSettings } from '@/state/settings';
 import { forget } from '@/services/cache';
 import { createPin, pollPin, getResources, buildAuthUrl, pickBestConnection } from '@/services/plextv_auth';
+import { TraktAuth } from '@/components/TraktAuth';
 
 export default function Settings() {
   const initial = loadSettings();
@@ -101,11 +102,24 @@ export default function Settings() {
               </div>
             )}
           </div>
+
+          {/* Trakt Authentication */}
+          <div className="mt-6">
+            <TraktAuth
+              onAuthComplete={() => {
+                // Refresh the page or update state as needed
+                window.dispatchEvent(new CustomEvent('trakt-auth-changed'));
+              }}
+              onAuthError={(error) => {
+                console.error('Trakt auth error:', error);
+              }}
+            />
+          </div>
+
           <L label="Plex URL"><input value={plexUrl} onChange={(e) => setPlexUrl(e.target.value)} placeholder="https://app.plex.tv" className="input" /></L>
           <L label="Plex Token"><input value={plexToken} onChange={(e) => setPlexToken(e.target.value)} placeholder="" className="input" /></L>
           <L label="TMDB API Key"><input value={tmdbKey} onChange={(e) => setTmdbKey(e.target.value)} className="input" /></L>
           <L label="Plex Account Token (Watchlist)"><input value={plexTvToken} onChange={(e) => setPlexTvToken(e.target.value)} placeholder="Plex.tv account token" className="input" /></L>
-          <L label="Trakt Client ID"><input value={traktKey} onChange={(e) => setTraktKey(e.target.value)} className="input" /></L>
           <div className="flex gap-3 pt-2">
             <button className="btn" onClick={async () => {
               setTmdbStatus('Testing…');

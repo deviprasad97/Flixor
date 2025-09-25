@@ -8,6 +8,9 @@ export type AppSettings = {
   plexServers?: Array<{ name: string; clientIdentifier: string; bestUri: string; token: string }>;
   tmdbBearer?: string;
   traktClientId?: string;
+  traktTokens?: string; // JSON stringified TraktTokens
+  traktScrobbleEnabled?: boolean;
+  traktSyncEnabled?: boolean;
 };
 
 const KEY = 'app.settings.v1';

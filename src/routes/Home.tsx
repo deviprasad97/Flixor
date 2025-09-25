@@ -5,12 +5,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loadSettings, saveSettings } from '@/state/settings';
 import { tmdbTrending, tmdbImage, tmdbVideos, tmdbImages } from '@/services/tmdb';
-import { traktTrending } from '@/services/trakt';
+import { traktTrending, isTraktAuthenticated } from '@/services/trakt';
 import { plexOnDeckGlobal, plexImage, plexLibs, plexSectionAll, plexMetadataWithExtras, plexPartUrl, plexLibrarySecondary, plexDir } from '@/services/plex';
 import BrowseModal from '@/components/BrowseModal';
 import { plexTvWatchlist } from '@/services/plextv';
 import { createPin, pollPin, getResources, buildAuthUrl, pickBestConnection } from '@/services/plextv_auth';
 import SectionBanner from '@/components/SectionBanner';
+import { TraktSection } from '@/components/TraktSection';
 
 type Item = { id: string; title: string; image?: string; subtitle?: string; badge?: string };
 
@@ -102,15 +103,7 @@ export default function Home() {
           rowsData.push({ title: 'Popular on Netflix', items: landscape.slice(0, 8) });
           rowsData.push({ title: 'Trending Now', items: landscape.slice(8, 16) });
         }
-        if (s.traktClientId) {
-          const tr = await traktTrending(s.traktClientId, 'shows');
-          const items: Item[] = (tr as any)?.slice(0, 10).map((x: any, i: number) => ({
-            id: `tmdb:tv:${String(x?.show?.ids?.tmdb || x?.show?.ids?.slug || i)}`,
-            title: x?.show?.title || 'Show',
-            image: `https://picsum.photos/seed/trakt${i}/800/400`,
-          })) || [];
-          rowsData.push({ title: 'Trakt Trending', items });
-        }
+        // Trakt content will be handled by TraktSection components below
         // Continue Watching via Plex On Deck if configured
         if (s.plexBaseUrl && s.plexToken) {
           try {
@@ -256,6 +249,21 @@ export default function Home() {
       {!loading && rows.map((r: any) => (
         <Row key={r.title} title={r.title} items={r.items as any} variant={r.variant} browseKey={r.browseKey} onItemClick={(id) => nav(`/details/${encodeURIComponent(id)}`)} />
       ))}
+
+      {/* Trakt Sections */}
+      <div className="mt-8 space-y-8">
+        <TraktSection type="trending" mediaType="movies" />
+        <TraktSection type="trending" mediaType="shows" />
+        {isTraktAuthenticated() && (
+          <>
+            <TraktSection type="watchlist" mediaType="movies" />
+            <TraktSection type="history" mediaType="shows" />
+            <TraktSection type="recommendations" mediaType="movies" />
+          </>
+        )}
+        <TraktSection type="popular" mediaType="shows" />
+      </div>
+
       <BrowseModal />
     </div>
   );
