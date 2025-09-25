@@ -910,7 +910,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
 
         {/* Bottom controls */}
         <div className="absolute bottom-0 left-0 right-0 p-6">
-          <div className="max-w-7xl mx-auto">
+          <div className="mx-auto">
             {/* Seek bar */}
             <div className="mb-4 h-12">
               <VideoSeekSlider
