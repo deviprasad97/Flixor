@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Row from '@/components/Row';
+import { loadSettings } from '@/state/settings';
 import { traktTrending, traktPopular, isTraktAuthenticated, ensureValidToken, traktGetWatchlist, traktGetRecommendations, traktGetHistory } from '@/services/trakt';
-import { MediaCard } from './MediaCard';
+import { tmdbBestBackdropUrl } from '@/services/tmdb';
+import { plexFindByGuid, plexImage } from '@/services/plex';
+import SkeletonRow from '@/components/SkeletonRow';
 
 interface TraktSectionProps {
   type?: 'trending' | 'popular' | 'watchlist' | 'recommendations' | 'history';
@@ -9,10 +14,11 @@ interface TraktSectionProps {
 }
 
 export function TraktSection({ type = 'trending', mediaType = 'movies', title }: TraktSectionProps) {
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<Array<{ id: string; title: string; image: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const nav = useNavigate();
 
   useEffect(() => {
     loadContent();
@@ -55,7 +61,9 @@ export function TraktSection({ type = 'trending', mediaType = 'movies', title }:
         }
       }
 
-      setItems(data);
+      // Map Trakt results to unified Row items (Plex/TMDB IDs + landscape art)
+      const mapped = await mapTraktToRowItems(data, mediaType);
+      setItems(mapped);
     } catch (err: any) {
       console.error('Failed to load Trakt content:', err);
       setError(err.message || 'Failed to load content');
@@ -85,39 +93,105 @@ export function TraktSection({ type = 'trending', mediaType = 'movies', title }:
     }
   };
 
-  const formatTraktItem = (item: any) => {
-    const media = item.movie || item.show || item;
-    const watched_at = item.watched_at;
-    const progress = item.progress;
+  // Convert Trakt payloads to Row items with best-effort ID mapping
+  async function mapTraktToRowItems(list: any[], mediaType: 'movies'|'shows') {
+    const s = loadSettings();
+    const typeNum = mediaType === 'movies' ? 1 : 2;
+    const out: Array<{ id: string; title: string; image: string }> = [];
 
-    // Extract the media object (could be nested in different ways)
-    const title = media.title;
-    const year = media.year;
-    const ids = media.ids || {};
-
-    // Build poster URL using TMDB ID if available
-    let posterUrl = '';
-    if (ids.tmdb) {
-      const posterType = item.movie ? 'movie' : 'tv';
-      posterUrl = `https://image.tmdb.org/t/p/w342/${posterType}/${ids.tmdb}/poster.jpg`;
+    // Helper: best-effort Plex GUID lookup by TMDB id
+    async function plexByTmdb(tmdbId: number, mTypeNum: 1|2) {
+      if (!s.plexBaseUrl || !s.plexToken) return undefined;
+      try {
+        // Try both common GUID prefixes
+        const a: any = await plexFindByGuid({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, `tmdb://${tmdbId}`, mTypeNum);
+        let hits: any[] = (a?.MediaContainer?.Metadata || []);
+        if (!hits.length) {
+          const b: any = await plexFindByGuid({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, `themoviedb://${tmdbId}`, mTypeNum);
+          hits = (b?.MediaContainer?.Metadata || []);
+        }
+        return hits[0];
+      } catch {
+        return undefined;
+      }
     }
 
-    return {
-      id: ids.trakt || ids.slug,
-      title,
-      year,
-      posterUrl,
-      overview: media.overview,
-      rating: media.rating,
-      type: item.movie ? 'movie' : 'show',
-      ids,
-      watched_at,
-      progress,
-      runtime: media.runtime,
-      genres: media.genres,
-      certification: media.certification
-    };
-  };
+    // Map each item
+    for (const it of list) {
+      const media = it.movie || it.show || it; // normalize
+      const ids = media?.ids || {};
+      const title = media?.title || '';
+      const year: number | undefined = media?.year;
+      const tmdbId: number | undefined = ids?.tmdb;
+
+      // Prefer Plex mapping when server available and TMDB id present
+      if (tmdbId) {
+        const hit = await plexByTmdb(tmdbId, typeNum as 1|2);
+        if (hit) {
+          const rk = String(hit.ratingKey);
+          const img = plexImage(s.plexBaseUrl!, s.plexToken!, hit.art || hit.thumb || hit.parentThumb || hit.grandparentThumb) || placeholderImg();
+          out.push({ id: `plex:${rk}`, title, image: img });
+          continue;
+        }
+      }
+
+      // Fallback to TMDB-native IDs with landscape backdrop
+      if (tmdbId && s.tmdbBearer) {
+        const mediaKey = mediaType === 'movies' ? 'movie' : 'tv';
+        let img = '';
+        try { img = (await tmdbBestBackdropUrl(s.tmdbBearer!, mediaKey as any, tmdbId, 'en')) || ''; } catch {}
+        out.push({ id: `tmdb:${mediaKey}:${tmdbId}`, title, image: img || placeholderImg() });
+        continue;
+      }
+
+      // Try Plex mapping via other external IDs (IMDb/TVDB)
+      if (s.plexBaseUrl && s.plexToken) {
+        const imdb = ids?.imdb as (string | undefined);
+        const tvdb = ids?.tvdb as (number | undefined);
+        if (imdb) {
+          try {
+            const byImdb: any = await plexFindByGuid({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, `imdb://${imdb}`, typeNum as 1|2);
+            const hit = (byImdb?.MediaContainer?.Metadata || [])[0];
+            if (hit) {
+              const rk = String(hit.ratingKey);
+              const img = plexImage(s.plexBaseUrl!, s.plexToken!, hit.art || hit.thumb || hit.parentThumb || hit.grandparentThumb) || placeholderImg();
+              out.push({ id: `plex:${rk}`, title, image: img });
+              continue;
+            }
+          } catch {}
+        }
+        if (tvdb) {
+          try {
+            const byTvdb: any = await plexFindByGuid({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, `tvdb://${tvdb}`, typeNum as 1|2);
+            const hit = (byTvdb?.MediaContainer?.Metadata || [])[0];
+            if (hit) {
+              const rk = String(hit.ratingKey);
+              const img = plexImage(s.plexBaseUrl!, s.plexToken!, hit.art || hit.thumb || hit.parentThumb || hit.grandparentThumb) || placeholderImg();
+              out.push({ id: `plex:${rk}`, title, image: img });
+              continue;
+            }
+          } catch {}
+        }
+      }
+
+      // If we can't map to Plex or TMDB, skip to keep row interactions consistent
+      // (Trakt items without TMDB IDs are rare)
+      continue;
+    }
+
+    // Keep rows concise like the rest of Home
+    return out.slice(0, 12);
+  }
+
+  function mediaKeyFromTrakt(it: any): 'movie' | 'tv' {
+    return it?.movie ? 'movie' : 'tv';
+  }
+
+  function placeholderImg(): string {
+    // Subtle neutral gradient SVG as data URI (2:1 aspect friendly)
+    const svg = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#111"/><stop offset="1" stop-color="#1e1e1e"/></linearGradient></defs><rect width="800" height="400" fill="url(#g)"/></svg>');
+    return `data:image/svg+xml,${svg}`;
+  }
 
   if (!isAuthenticated && (type === 'watchlist' || type === 'recommendations' || type === 'history')) {
     return (
@@ -136,21 +210,7 @@ export function TraktSection({ type = 'trending', mediaType = 'movies', title }:
     );
   }
 
-  if (loading) {
-    return (
-      <div className="mb-8">
-        <h2 className="text-2xl font-semibold mb-4">{getSectionTitle()}</h2>
-        <div className="flex space-x-4 overflow-x-auto pb-4">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="flex-shrink-0 w-48">
-              <div className="bg-gray-800 rounded-lg aspect-[2/3] animate-pulse"></div>
-              <div className="mt-2 h-4 bg-gray-800 rounded animate-pulse"></div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <SkeletonRow title={getSectionTitle()} count={8} />;
 
   if (error) {
     return (
@@ -175,39 +235,12 @@ export function TraktSection({ type = 'trending', mediaType = 'movies', title }:
   }
 
   return (
-    <div className="mb-8">
-      <h2 className="text-2xl font-semibold mb-4">{getSectionTitle()}</h2>
-      <div className="flex space-x-4 overflow-x-auto pb-4 scrollbar-hide">
-        {items.map((item, index) => {
-          const formatted = formatTraktItem(item);
-          return (
-            <div key={`${formatted.id}-${index}`} className="flex-shrink-0 w-48">
-              <MediaCard
-                title={formatted.title}
-                year={formatted.year}
-                posterUrl={formatted.posterUrl}
-                onClick={() => {
-                  // TODO: Navigate to details page with Trakt data
-                  console.log('Clicked Trakt item:', formatted);
-                }}
-              />
-              {formatted.progress && (
-                <div className="mt-1 h-1 bg-gray-700 rounded">
-                  <div
-                    className="h-full bg-green-600 rounded"
-                    style={{ width: `${formatted.progress}%` }}
-                  />
-                </div>
-              )}
-              {formatted.watched_at && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Watched {new Date(formatted.watched_at).toLocaleDateString()}
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
+    <div className="mb-2">
+      <Row
+        title={getSectionTitle()}
+        items={items}
+        onItemClick={(id) => nav(`/details/${encodeURIComponent(id)}`)}
+      />
     </div>
   );
 }

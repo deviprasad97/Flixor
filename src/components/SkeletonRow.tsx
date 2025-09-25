@@ -1,13 +1,28 @@
-export default function SkeletonRow({ count = 8 }: { count?: number }) {
+export default function SkeletonRow({ count = 8, title }: { count?: number; title?: string }) {
   return (
-    <div className="px-4 md:px-6 lg:px-10 py-4">
-      <div className="h-5 w-40 skeleton rounded mb-3" />
-      <div className="flex gap-3">
-        {Array.from({ length: count }).map((_, i) => (
-          <div key={i} className="w-40 aspect-[2/3] rounded-md overflow-hidden bg-neutral-800 skeleton" />
-        ))}
+    <section className="py-2 my-5">
+      <div className="page-gutter">
+        <div className="row-band">
+          <div className="pt-4">
+            <div className="flex items-baseline gap-3 group">
+              {title ? (
+                <h2 className="text-neutral-200 font-semibold text-xl md:text-2xl cursor-default">{title}</h2>
+              ) : (
+                <div className="h-6 w-48 skeleton rounded" />
+              )}
+            </div>
+          </div>
+          <div className="row-edge no-scrollbar overflow-x-auto" style={{ padding: '12px 0 16px 0' }}>
+            <div className="flex gap-4 pb-4 w-max">
+              {Array.from({ length: count }).map((_, i) => (
+                <div key={i} className="group flex-shrink-0 w-[360px] md:w-[420px]">
+                  <div className="relative aspect-[2/1] rounded-xl overflow-hidden bg-neutral-800 skeleton" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
-
