@@ -4,7 +4,7 @@ import Row from '@/components/Row';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loadSettings, saveSettings } from '@/state/settings';
-import { tmdbTrending, tmdbImage, tmdbVideos, tmdbImages } from '@/services/tmdb';
+import { tmdbTrending, tmdbImage, tmdbVideos, tmdbImages, tmdbDetails } from '@/services/tmdb';
 import { traktTrending, isTraktAuthenticated } from '@/services/trakt';
 import { plexOnDeckGlobal, plexImage, plexLibs, plexSectionAll, plexMetadataWithExtras, plexPartUrl, plexLibrarySecondary, plexDir } from '@/services/plex';
 import BrowseModal from '@/components/BrowseModal';
@@ -20,7 +20,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<Array<{ title: string; items: Item[]; variant?: 'default'|'continue' }>>([]);
   const [needsPlex, setNeedsPlex] = useState(false);
-  const [hero, setHero] = useState<{ title: string; overview?: string; poster?: string; backdrop?: string; rating?: string; videoUrl?: string; ytKey?: string; id?: string } | null>(null);
+  const [hero, setHero] = useState<{ title: string; overview?: string; poster?: string; backdrop?: string; rating?: string; videoUrl?: string; ytKey?: string; id?: string; year?: string; runtime?: number; genres?: string[]; logoUrl?: string } | null>(null);
   const genreRows: Array<{label: string; type: 'movie'|'show'; genre: string}> = [
     { label: 'TV Shows - Children', type: 'show', genre: 'Children' },
     { label: 'Movie - Music', type: 'movie', genre: 'Music' },
@@ -89,7 +89,30 @@ export default function Home() {
               const f = (tmdb as any).results[0];
               let ytKey: string | undefined;
               try { const vids: any = await tmdbVideos(s.tmdbBearer!, 'tv', String(f.id)); ytKey = (vids.results||[]).find((v:any)=>v.site==='YouTube')?.key; } catch {}
-              tmdbHero = { title: f.name||f.title, overview: f.overview, poster: tmdbImage(f.poster_path,'w500')||undefined, backdrop: tmdbImage(f.backdrop_path,'w1280')||undefined, rating: undefined, ytKey, id: `tmdb:tv:${String(f.id)}` };
+
+              // Get additional details for the hero
+              let genres: string[] = [];
+              let year: string | undefined;
+              let runtime: number | undefined;
+              try {
+                const details: any = await tmdbDetails(s.tmdbBearer!, 'tv', String(f.id));
+                genres = (details.genres || []).map((g: any) => g.name);
+                year = (details.first_air_date || '').slice(0, 4);
+                runtime = details.episode_run_time?.[0];
+              } catch {}
+
+              tmdbHero = {
+                title: f.name||f.title,
+                overview: f.overview,
+                poster: tmdbImage(f.poster_path,'w500')||undefined,
+                backdrop: tmdbImage(f.backdrop_path,'w1280')||undefined,
+                rating: undefined,
+                ytKey,
+                id: `tmdb:tv:${String(f.id)}`,
+                genres,
+                year,
+                runtime
+              };
               try {
                 const imgs: any = await tmdbImages(s.tmdbBearer!, 'tv', String(f.id), 'en,null');
                 const logo = (imgs?.logos||[]).find((l:any)=>l.iso_639_1==='en') || (imgs?.logos||[])[0];
@@ -176,7 +199,24 @@ export default function Home() {
               const backdrop = plexImage(s.plexBaseUrl!, s.plexToken!, mm.art || mm.parentThumb || mm.grandparentThumb || mm.thumb);
               const extra = mm?.Extras?.Metadata?.[0]?.Media?.[0]?.Part?.[0]?.key as string | undefined;
               const videoUrl = extra ? plexPartUrl(s.plexBaseUrl!, s.plexToken!, extra) : undefined;
-              plexHero = { title: mm.title || mm.grandparentTitle || 'Title', overview: mm.summary, poster, backdrop, rating: mm.contentRating || undefined, videoUrl, id: `plex:${String(mm.ratingKey)}` };
+
+              // Extract metadata for hero
+              const genres = (mm.Genre || []).map((g: any) => g.tag);
+              const year = mm.year ? String(mm.year) : undefined;
+              const runtime = mm.duration ? Math.round(mm.duration / 60000) : undefined;
+
+              plexHero = {
+                title: mm.title || mm.grandparentTitle || 'Title',
+                overview: mm.summary,
+                poster,
+                backdrop,
+                rating: mm.contentRating || undefined,
+                videoUrl,
+                id: `plex:${String(mm.ratingKey)}`,
+                genres,
+                year,
+                runtime
+              };
               // If this item has a TMDB GUID, try TMDB logo and dispatch
               try {
                 const tmdbGuid = (mm.Guid || []).map((g:any)=>String(g.id||''))
@@ -199,6 +239,10 @@ export default function Home() {
         // Commit hero once with final choice (prefer Plex)
         const finalHero = plexHero || tmdbHero;
         if (!hero && finalHero) {
+          // Add logo URL to hero data
+          if (heroLogoUrl) {
+            finalHero.logoUrl = heroLogoUrl;
+          }
           setHero(finalHero);
           if (heroLogoUrl) window.dispatchEvent(new CustomEvent('home-hero-logo', { detail: { logoUrl: heroLogoUrl } }));
         }
@@ -233,14 +277,17 @@ export default function Home() {
           posterUrl={hero.poster}
           backdropUrl={hero.backdrop}
           rating={hero.rating}
+          year={hero.year}
+          runtime={hero.runtime}
+          genres={hero.genres}
+          logoUrl={hero.logoUrl}
           videoUrl={hero.videoUrl}
           ytKey={hero.ytKey}
-          onPlay={() => { if (hero.id) nav(`/details/${encodeURIComponent(hero.id)}`); }}
+          onPlay={() => { if (hero.id) nav(`/player/${encodeURIComponent(hero.id)}`); }}
+          onMoreInfo={() => { if (hero.id) nav(`/details/${encodeURIComponent(hero.id)}`); }}
         />
       ) : (
-        <div className="bleed" style={{ padding: '20px' }}>
-          <div className="rounded-2xl overflow-hidden ring-1 ring-white/10 bg-neutral-900/40 h-[56vh] md:h-[64vh] xl:h-[68vh] skeleton" />
-        </div>
+        <div className="relative w-full min-h-[85vh] md:min-h-[90vh] bg-neutral-900/40 skeleton" />
       )}
       <div className="mt-6" />
       {needsPlex && (
