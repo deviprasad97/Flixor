@@ -19,6 +19,7 @@ interface PlexVideoPlayerProps {
   volume?: number;
   playbackRate?: number;
   onPlayingChange?: (playing: boolean) => void;
+  onCodecError?: (error: string) => void; // Callback for codec-specific errors
 }
 
 export default function PlexVideoPlayer({
@@ -36,6 +37,7 @@ export default function PlexVideoPlayer({
   volume = 1,
   playbackRate = 1,
   onPlayingChange,
+  onCodecError,
 }: PlexVideoPlayerProps) {
   const internalVideoRef = useRef<HTMLVideoElement>(null);
   const videoRef = externalVideoRef || internalVideoRef;
@@ -139,8 +141,16 @@ export default function PlexVideoPlayer({
 
         dash.on(dashjs.MediaPlayer.events.ERROR, (e: any) => {
           console.error('DASH error:', e);
-          if (e.error && e.error.message) {
-            onError?.(`DASH Error: ${e.error.message}`);
+          const errorMsg = e.error?.message || e.error?.code || 'Unknown error';
+
+          // Check for Dolby Vision codec mismatch errors
+          if (errorMsg.includes('dolbyvision') ||
+              errorMsg.includes('codec') ||
+              errorMsg.includes('CHUNK_DEMUXER_ERROR_APPEND_FAILED')) {
+            console.warn('Dolby Vision codec error detected, triggering fallback');
+            onCodecError?.(errorMsg);
+          } else {
+            onError?.(`DASH Error: ${errorMsg}`);
           }
         });
 
@@ -257,7 +267,18 @@ export default function PlexVideoPlayer({
     const handleError = (e: Event) => {
       const error = video.error;
       console.error('Video error:', error);
-      onError?.(`Video error: ${error?.message || 'Unknown error'}`);
+      const errorMsg = error?.message || 'Unknown error';
+
+      // Check for Dolby Vision or codec mismatch errors
+      if (errorMsg.includes('dolbyvision') ||
+          errorMsg.includes('codec') ||
+          errorMsg.includes('CHUNK_DEMUXER_ERROR_APPEND_FAILED') ||
+          errorMsg.includes('MEDIA_ERR_SRC_NOT_SUPPORTED')) {
+        console.warn('Dolby Vision or codec error detected, triggering fallback');
+        onCodecError?.(errorMsg);
+      } else {
+        onError?.(errorMsg);
+      }
     };
 
     const handleWaiting = () => {

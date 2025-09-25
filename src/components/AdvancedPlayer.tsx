@@ -27,6 +27,7 @@ import {
   getSubtitleOptions,
   getAudioOptions,
   getExternalSubtitleUrl,
+  hasDolbyVision,
 } from '@/services/plex_decision';
 
 interface PlayerMarker {
@@ -184,10 +185,15 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
   const [qualityOptions, setQualityOptions] = useState<any[]>([]);
   const [audioOptions, setAudioOptions] = useState<any[]>([]);
   const [subtitleOptions, setSubtitleOptions] = useState<any[]>([]);
-  
+
   // Play queue
   const [playQueue, setPlayQueue] = useState<PlexMetadata[]>([]);
   const [nextEpisodeCountdown, setNextEpisodeCountdown] = useState<number | null>(null);
+
+  // Codec error handling
+  const [codecErrorMessage, setCodecErrorMessage] = useState<string | null>(null);
+  const [retryingWithTranscode, setRetryingWithTranscode] = useState(false);
+  const hasRetriedWithTranscode = useRef(false);
   
   // Timeline update interval
   const timelineIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -196,11 +202,12 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
   // Load metadata and initialize player
   useEffect(() => {
     if (!itemId) return;
-    
+
     const loadContent = async () => {
       try {
         setLoading(true);
         setError(null);
+        hasRetriedWithTranscode.current = false; // Reset retry flag when loading new content
         
         // Load metadata
         const metaResponse = await plexMetadata(plexConfig, itemId);
@@ -223,17 +230,35 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
         const defaultSub = subOpts.find(s => s.selected);
         setSelectedSubtitleStream(defaultSub ? defaultSub.id : '0');
         
+        // Check for Dolby Vision
+        const hasDV = hasDolbyVision(meta);
+        let effectiveQuality = quality;
+
+        // If Dolby Vision is detected and quality is original, auto-switch to highest transcoded quality
+        if (hasDV && quality === 'original' && !hasRetriedWithTranscode.current) {
+          console.warn('Dolby Vision detected - automatically switching to transcoded quality');
+          setCodecErrorMessage('Dolby Vision detected - using transcoded quality for compatibility');
+
+          const transcodedOptions = qualOpts.filter(opt => opt.value !== 'original');
+          effectiveQuality = transcodedOptions[0]?.value || 20000;
+          setQuality(effectiveQuality);
+          localStorage.setItem('player_quality', effectiveQuality.toString());
+
+          // Clear message after delay
+          setTimeout(() => setCodecErrorMessage(null), 5000);
+        }
+
         // Determine stream decision
         const decision = getStreamDecision(meta, {
-          quality: quality,
-          directPlay: quality === 'original',
+          quality: effectiveQuality,
+          directPlay: effectiveQuality === 'original' && !hasDV,
           audioStreamId: selectedAudioStream || undefined,
           subtitleStreamId: selectedSubtitleStream || undefined,
         });
 
         // Call decision API to see what Plex will actually do
         const plexDecision = await plexUniversalDecision(plexConfig, itemId, {
-          maxVideoBitrate: quality === 'original' ? undefined : Number(quality),
+          maxVideoBitrate: effectiveQuality === 'original' ? undefined : Number(effectiveQuality),
           protocol: 'dash', // Use DASH like Plex Web for better codec support
           autoAdjustQuality: false,
           directPlay: decision.directPlay,
@@ -246,14 +271,14 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
 
         // Generate stream URL based on actual Plex decision
         let url: string;
-        if (plexDecision.canDirectPlay && meta.Media?.[0]?.Part?.[0]?.key) {
+        if (plexDecision.canDirectPlay && meta.Media?.[0]?.Part?.[0]?.key && !hasDV) {
           // Direct play URL
           url = plexDirectPlayUrl(plexConfig, meta.Media[0].Part[0].key);
           // console.log('Using direct play based on Plex decision');
         } else {
           // Transcode URL with actual Plex decision
           url = plexStreamUrl(plexConfig, itemId, {
-            maxVideoBitrate: quality === 'original' ? undefined : Number(quality),
+            maxVideoBitrate: effectiveQuality === 'original' ? undefined : Number(effectiveQuality),
             protocol: 'dash', // Use DASH for better codec support
             autoAdjustQuality: false,
             directPlay: false,
@@ -665,6 +690,57 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
     setError(err);
   }, []);
 
+  const handleCodecError = useCallback(async (err: string) => {
+    console.error('Codec error detected:', err);
+
+    // Only retry once to avoid infinite loops
+    if (hasRetriedWithTranscode.current || !metadata || !itemId) {
+      setError(err);
+      return;
+    }
+
+    hasRetriedWithTranscode.current = true;
+    setCodecErrorMessage('Dolby Vision Profile 7 not supported. Switching to transcoded quality...');
+    setRetryingWithTranscode(true);
+
+    try {
+      // Kill existing transcode sessions
+      await plexKillAllTranscodeSessions(plexConfig);
+
+      // Get the highest available transcoded quality
+      const transcodedOptions = qualityOptions.filter(opt => opt.value !== 'original');
+      const maxQuality = transcodedOptions[0]?.value || 20000; // Default to 20 Mbps if no options
+
+      console.log('Retrying with transcoded quality:', maxQuality);
+
+      // Force transcode with maximum quality
+      const url = plexStreamUrl(plexConfig, itemId, {
+        maxVideoBitrate: Number(maxQuality),
+        protocol: 'dash',
+        autoAdjustQuality: false,
+        directPlay: false,
+        directStream: false, // Force transcode
+        audioStreamID: selectedAudioStream || undefined,
+        subtitleStreamID: selectedSubtitleStream || undefined,
+        forceReload: true,
+      });
+
+      setStreamUrl(url);
+      setQuality(maxQuality);
+      localStorage.setItem('player_quality', maxQuality.toString());
+
+      // Clear error states after a delay
+      setTimeout(() => {
+        setCodecErrorMessage(null);
+        setRetryingWithTranscode(false);
+      }, 5000);
+    } catch (error) {
+      console.error('Failed to retry with transcode:', error);
+      setError(err);
+      setRetryingWithTranscode(false);
+    }
+  }, [metadata, itemId, plexConfig, qualityOptions, selectedAudioStream, selectedSubtitleStream]);
+
   const handleBuffering = useCallback((isBuffering: boolean) => {
     setBuffering(isBuffering);
   }, []);
@@ -711,6 +787,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
   // Use the options from state that were set during metadata load
   const canPlayDirect = metadata ? canDirectPlay(metadata) : false;
   const canStreamDirect = metadata ? canDirectStream(metadata) : false;
+  const hasDV = metadata ? hasDolbyVision(metadata) : false;
 
   return (
     <div ref={containerRef} className="fixed inset-0 bg-black z-50">
@@ -732,6 +809,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
             onError={handleError}
             onBuffering={handleBuffering}
             onPlayingChange={handlePlayingChange}
+            onCodecError={handleCodecError}
           />
         </div>
       )}
@@ -740,6 +818,20 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
       {buffering && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-40">
           <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+        </div>
+      )}
+
+      {/* Codec error notification */}
+      {codecErrorMessage && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50">
+          <div className="bg-yellow-600/90 text-white px-6 py-3 rounded-lg shadow-lg">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span>{codecErrorMessage}</span>
+            </div>
+          </div>
         </div>
       )}
 
@@ -978,6 +1070,21 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
                       <div className="max-h-64 overflow-y-auto">
                         {settingsTab === 'quality' && (
                           <div className="p-2">
+                            {hasDV && (
+                              <div className="mb-2 p-2 bg-yellow-600/20 rounded text-yellow-400 text-sm">
+                                <div className="flex items-start gap-2">
+                                  <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                  </svg>
+                                  <div>
+                                    <div className="font-semibold">Dolby Vision Content</div>
+                                    <div className="text-xs text-yellow-300/80 mt-1">
+                                      Direct play may not work. Select a transcoded quality for best compatibility.
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                             {qualityOptions.map((option) => (
                               <button
                                 key={option.value}
@@ -985,16 +1092,26 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
                                   (quality === option.value || (typeof quality === 'number' && typeof option.value === 'number' && quality === option.value)) ? 'text-red-500' : 'text-white'
                                 }`}
                                 onClick={() => {
+                                  hasRetriedWithTranscode.current = false; // Reset retry flag when manually changing quality
                                   handleQualityChange(option.value);
                                   setShowSettings(false);
                                 }}
                               >
                                 {option.label}
-                                {option.value === 'original' && canPlayDirect && (
+                                {option.value === 'original' && canPlayDirect && !hasDV && (
                                   <span className="text-xs text-white/60 ml-2">(Direct Play)</span>
                                 )}
-                                {option.value === 'original' && !canPlayDirect && (
+                                {option.value === 'original' && !canPlayDirect && !hasDV && (
                                   <span className="text-xs text-white/60 ml-2">(Direct Stream/Original)</span>
+                                )}
+                                {option.value === 'original' && hasDV && (
+                                  <span className="text-xs text-yellow-400 ml-2">⚠ DV - May not play</span>
+                                )}
+                                {option.value !== 'original' && hasDV && (
+                                  <span className="text-xs text-green-400 ml-2">✓ Compatible</span>
+                                )}
+                                {retryingWithTranscode && option.value !== 'original' && option.value === quality && (
+                                  <span className="text-xs text-green-400 ml-2">(Auto-selected)</span>
                                 )}
                               </button>
                             ))}

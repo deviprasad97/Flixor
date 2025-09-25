@@ -1,15 +1,37 @@
 // Plex decision and capability detection
 import { PlexConfig } from './plex';
 
+// Check if content has Dolby Vision
+export function hasDolbyVision(media: any): boolean {
+  if (!media?.Media?.[0]) return false;
+
+  const mediaInfo = media.Media[0];
+  const videoCodec = mediaInfo.videoCodec?.toLowerCase();
+  const videoProfile = mediaInfo.videoProfile?.toLowerCase();
+
+  // Check for Dolby Vision in codec or profile
+  return videoCodec?.includes('dovi') ||
+         videoCodec?.includes('dolbyvision') ||
+         videoCodec?.includes('dv') ||
+         videoProfile?.includes('dolby') ||
+         videoProfile?.includes('dv');
+}
+
 // Check if browser can play a specific codec
 export function canDirectPlay(media: any): boolean {
   if (!media?.Media?.[0]) return false;
-  
+
   const videoElement = document.createElement('video');
   const mediaInfo = media.Media[0];
   const container = mediaInfo.container?.toLowerCase();
   const videoCodec = mediaInfo.videoCodec?.toLowerCase();
   const audioCodec = mediaInfo.audioCodec?.toLowerCase();
+
+  // Dolby Vision is not supported in browsers
+  if (hasDolbyVision(media)) {
+    console.warn('Dolby Vision detected - direct play not possible');
+    return false;
+  }
   
   // HEVC/H.265 is NOT supported in browsers (except Safari with hardware support)
   if (videoCodec?.includes('hevc') || videoCodec?.includes('h265')) {
