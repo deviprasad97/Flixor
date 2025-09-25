@@ -54,6 +54,7 @@ export default function Details() {
   const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
   const [showMediaInfo, setShowMediaInfo] = useState<boolean>(false);
   const [moodTags, setMoodTags] = useState<string[]>([]);
+  const [plexMappedId, setPlexMappedId] = useState<string | undefined>(undefined);
   const [personOpen, setPersonOpen] = useState(false);
   const [personId, setPersonId] = useState<string | undefined>(undefined);
   const [personName, setPersonName] = useState<string | undefined>(undefined);
@@ -67,6 +68,8 @@ export default function Details() {
     async function load() {
       if (!id) return;
       try {
+        // Reset mapped state when navigating to a different details item
+        setPlexMappedId(undefined);
         if (id.startsWith('plex:') && s.plexBaseUrl && s.plexToken) {
           const rk = id.replace(/^plex:/, '');
           const meta: any = await plexMetadata({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk);
@@ -311,6 +314,7 @@ export default function Details() {
                 if (match) {
                   // Replace backdrop with plex art for authenticity and add badges
                   const m = match;
+                  setPlexMappedId(`plex:${String(m.ratingKey)}`);
                   setBackdrop(plexImage(s.plexBaseUrl!, s.plexToken!, m.art || m.thumb || m.parentThumb || m.grandparentThumb) || backdrop);
                   const extra: string[] = [];
                   const media0 = (m.Media || [])[0];
@@ -418,8 +422,10 @@ export default function Details() {
   const playSelected = async () => {
     try {
     // Always go through in-app player so both Web and Tauri paths work consistently
+    // Prefer mapped Plex id when available to ensure real playback instead of sample fallback
+    const targetId = (plexMappedId || id)!;
     const ver = activeVersion ? `?v=${encodeURIComponent(activeVersion)}` : '';
-    nav(`/player/${id}${ver}`);
+    nav(`/player/${encodeURIComponent(targetId)}${ver}`);
     } catch (e) { console.error(e); }
   };
 
@@ -467,17 +473,20 @@ export default function Details() {
                       <h1 className="text-5xl md:text-7xl font-extrabold mb-3 title-shadow">{title}</h1>
                     )}
                     <div className="flex gap-2 mb-4 items-center">
-                    {plexWatch ? (
-                      <button onClick={playSelected} className="cta-primary">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="mr-2"><path d="M8 5v14l11-7z"/></svg>
-                        Play
-                      </button>
-                    ) : (
-                      <button onClick={() => nav(`/player/${id}${activeVersion?`?v=${encodeURIComponent(activeVersion)}`:''}`)} className="cta-primary">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="mr-2"><path d="M8 5v14l11-7z"/></svg>
-                        Play
-                      </button>
-                    )}
+                    {(() => {
+                      const playable = id?.startsWith('plex:') || !!plexMappedId;
+                      return (
+                        <button
+                          onClick={playSelected}
+                          disabled={!playable}
+                          className={`cta-primary ${!playable ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          title={playable ? 'Play' : 'No local source'}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="mr-2"><path d="M8 5v14l11-7z"/></svg>
+                          Play
+                        </button>
+                      );
+                    })()}
                     <button className="cta-ghost" title="Add to My List">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="mr-1"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></svg>
                       Add
