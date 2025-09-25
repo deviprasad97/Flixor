@@ -45,6 +45,21 @@ html, body, #root { overflow-x: hidden; }
       linear-gradient(180deg, rgba(110, 60, 40, .22) 0%, rgba(40, 20, 16, .18) 40%, rgba(20,20,20,.0) 100%),
       linear-gradient(to bottom, #0b0b0b, #141414);
   }
+  /* Home screen cinematic gradient: dark base with red glow bottom-left
+     and teal glow top-right, plus a soft vignette. */
+  .bg-home-gradient {
+    background:
+      /* subtle top center highlight */
+      radial-gradient(1200px 60% at 50% -10%, rgba(255,255,255,0.06), transparent 70%),
+      /* teal glow top-right */
+      radial-gradient(80% 70% at 82% 8%, rgba(16, 94, 107, 0.45), rgba(16, 94, 107, 0.28) 35%, transparent 70%),
+      /* red glow bottom-left */
+      radial-gradient(70% 65% at 12% 88%, rgba(128, 22, 18, 0.55), rgba(128, 22, 18, 0.32) 40%, transparent 72%),
+      /* soft vignette around the edges */
+      radial-gradient(140% 120% at 50% 40%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.35) 100%),
+      /* base */
+      linear-gradient(to bottom, #0a0a0a, #121212);
+  }
   .card { @apply rounded-xl overflow-hidden ring-1 ring-white/5 bg-neutral-900/30; box-shadow: 0 16px 40px rgba(0,0,0,.55), 0 6px 18px rgba(0,0,0,.35); }
   .card-hover { transition: transform 300ms ease, box-shadow 300ms ease; }
   .card-hover:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 24px 60px rgba(0,0,0,.65), 0 8px 20px rgba(0,0,0,.45); }

@@ -9,7 +9,7 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col">
       {!isPlayerRoute && <TopNav />}
-      <main className={`flex-1 ${!isPlayerRoute && !isHome ? 'pt-16' : ''}`}>
+      <main className={` bg-home-gradient flex-1`}>
         <Outlet />
       </main>
     </div>

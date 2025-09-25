@@ -230,7 +230,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="pb-10 bg-app-gradient">
+    <div className="pb-10 bg-home-gradient">
       {/* Spacer to separate hero from transparent nav */}
       <div className="pt-24" />
       {hero ? (

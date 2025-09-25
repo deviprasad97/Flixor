@@ -26,13 +26,11 @@ export default function TopNav() {
     if (s.plexServers) setServers(s.plexServers);
   }, []);
 
-  const isHome = pathname === '/';
-
   // Track scroll and drive background fade with rAF for smoothness
   useEffect(() => {
     const el = headerRef.current;
     if (!el) return;
-    let current = isHome ? 0 : 1; // start fully transparent on Home, opaque elsewhere
+    let current = 0; // start transparent; fade based on scroll on all pages
     let target = current;
     let rafId: number | null = null;
 
@@ -56,7 +54,7 @@ export default function TopNav() {
 
     const onScroll = () => {
       const y = window.scrollY || 0;
-      target = isHome ? Math.min(1, y / 120) : 1;
+      target = Math.min(1, y / 120);
       if (rafId == null) rafId = requestAnimationFrame(animate);
     };
     // initialize based on current scroll
@@ -66,7 +64,7 @@ export default function TopNav() {
       window.removeEventListener('scroll', onScroll);
       if (rafId != null) cancelAnimationFrame(rafId);
     };
-  }, [pathname, isHome]);
+  }, [pathname]);
 
   async function doRefresh() {
     const list = await refreshPlexServers();

@@ -4,13 +4,14 @@ import FilterBar from '@/components/FilterBar';
 import { loadSettings } from '@/state/settings';
 import { plexLibs, plexSectionAll, plexImage, withContainer } from '@/services/plex';
 import SectionBanner from '@/components/SectionBanner';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 
 type Item = { id: string; title: string; image?: string; subtitle?: string; badge?: string };
 
 export default function Library() {
   const nav = useNavigate();
+  const location = useLocation();
   const [items, setItems] = useState<Item[]>([]);
   const [start, setStart] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -31,7 +32,11 @@ export default function Library() {
           .filter((d: any) => d.type === 'movie' || d.type === 'show')
           .map((d: any) => ({ key: String(d.key), title: d.title, type: d.type }));
         setSections(secs);
-        const preferred = secs.find((x: any) => x.type === 'movie') || secs[0];
+        // Choose default section based on URL tab parameter
+        const params = new URLSearchParams(location.search);
+        const tab = params.get('tab'); // 'tv' | 'movies'
+        const wantType: 'show'|'movie' | null = tab === 'tv' ? 'show' : tab === 'movies' ? 'movie' : null;
+        const preferred = wantType ? secs.find((x: any) => x.type === wantType) : (secs[0] || null);
         if (preferred) setActive(preferred.key);
         else setNeedsPlex(true);
       } catch (e) {
@@ -39,7 +44,19 @@ export default function Library() {
       }
     }
     load();
-  }, []);
+  }, [location.search]);
+
+  // If user switches between /library?tab=tv and /library?tab=movies while already loaded,
+  // update the active section accordingly.
+  useEffect(() => {
+    if (sections.length === 0) return;
+    const params = new URLSearchParams(location.search);
+    const tab = params.get('tab');
+    const wantType: 'show'|'movie' | null = tab === 'tv' ? 'show' : tab === 'movies' ? 'movie' : null;
+    if (!wantType) return;
+    const preferred = sections.find((s) => s.type === wantType);
+    if (preferred && preferred.key !== active) setActive(preferred.key);
+  }, [location.search, sections]);
 
   // Reload app when server changes so sections/items refresh
   useEffect(() => {
@@ -80,7 +97,7 @@ export default function Library() {
   const filtered = useMemo(() => items.filter((it) => it.title.toLowerCase().includes(query.toLowerCase())), [items, query]);
 
   return (
-    <div className="bg-app-gradient pb-8">
+    <div className="bg-home-gradient pb-8 pt-16">
       {!needsPlex && sections.length>0 ? (
         <div className="page-gutter pt-6 space-y-3">
           <div className="flex flex-wrap gap-2">
