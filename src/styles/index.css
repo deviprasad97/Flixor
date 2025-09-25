@@ -121,4 +121,13 @@ html, body, #root { overflow-x: hidden; }
   @media (min-width: 768px) { .hero-col-left { grid-column: span 7 / span 7; } .hero-col-right { grid-column: span 5 / span 5; } }
   .meta-label { @apply text-neutral-400 text-xs uppercase tracking-wider; }
   .right-list { @apply text-sm text-neutral-300; }
+
+  /* Utility to hide scrollbars */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }

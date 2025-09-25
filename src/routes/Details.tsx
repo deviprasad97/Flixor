@@ -6,7 +6,8 @@ import { plexMetadata, plexImage, plexSearch, plexChildren, plexFindByGuid, plex
 import { tmdbDetails, tmdbImage, tmdbCredits, tmdbExternalIds, tmdbRecommendations, tmdbVideos, tmdbSearchTitle, tmdbTvSeasons, tmdbTvSeasonEpisodes, tmdbSimilar, tmdbImages } from '@/services/tmdb';
 import PersonModal from '@/components/PersonModal';
 import { useEffect, useState } from 'react';
-import Tabs from '@/components/Tabs';
+import DetailsHero from '@/components/DetailsHero';
+import DetailsTabs from '@/components/DetailsTabs';
 import TechnicalChips from '@/components/TechnicalChips';
 import VersionSelector from '@/components/VersionSelector';
 import Toast from '@/components/Toast';
@@ -32,7 +33,7 @@ export default function Details() {
   const [plexWatch, setPlexWatch] = useState<string | undefined>(undefined);
   const [poster, setPoster] = useState<string | undefined>(undefined);
   const [toast, setToast] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<string>('RECOMMENDATIONS');
+  const [activeTab, setActiveTab] = useState<string>('SUGGESTED');
   const [seasons, setSeasons] = useState<Array<{key:string; title:string}>>([]);
   const [seasonKey, setSeasonKey] = useState<string>('');
   const [episodes, setEpisodes] = useState<any[]>([]);
@@ -418,7 +419,18 @@ export default function Details() {
     loadEps();
   }, [seasonKey]);
 
-  const tabs = seasons.length > 0 ? ['EPISODES','RECOMMENDATIONS','INFO','REVIEWS'] : ['RECOMMENDATIONS','INFO','REVIEWS'];
+  const tabsData = seasons.length > 0
+    ? [
+        { id: 'EPISODES', label: 'Episodes', count: episodes.length || undefined },
+        { id: 'SUGGESTED', label: 'Suggested' },
+        { id: 'EXTRAS', label: 'Extras' },
+        { id: 'DETAILS', label: 'Details' }
+      ]
+    : [
+        { id: 'SUGGESTED', label: 'Suggested' },
+        { id: 'EXTRAS', label: 'Extras' },
+        { id: 'DETAILS', label: 'Details' }
+      ];
   const playSelected = async () => {
     try {
     // Always go through in-app player so both Web and Tauri paths work consistently
@@ -430,225 +442,180 @@ export default function Details() {
   };
 
   return (
-    <div>
+    <div className="min-h-screen bg-black">
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
-      {/* Hero billboard full-bleed */}
-      <div className="bleed relative h-[64vh] md:h-[72vh]">
-        {/* Background masked to fade bottom */}
-        <div className="hero-bg">
-          <img src={backdrop || `https://picsum.photos/seed/details-${id}/1600/900`} className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${showTrailer? 'opacity-0':'opacity-100'}`} />
-          <div className="hero-overlay" />
-          {(plexTrailerUrl || trailerKey) && (
-            <div className="absolute inset-0 opacity-40 pointer-events-none">
-              {plexTrailerUrl ? (
-                <video id="plex-trailer" className="w-full h-full object-cover" src={plexTrailerUrl} autoPlay muted={trailerMuted} loop playsInline />
-              ) : trailerKey ? (
-                <iframe id="yt-trailer" className="w-full h-full" src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=${trailerMuted?1:0}&controls=0&loop=1&playsinline=1&rel=0&showinfo=0&modestbranding=1&playlist=${trailerKey}&enablejsapi=1`} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" />
-              ) : null}
-            </div>
-          )}
-        </div>
-        {(plexTrailerUrl || trailerKey) && (
-          <button className="hero-mute z-20" onClick={() => toggleMute()} title={trailerMuted? 'Unmute trailer':'Mute trailer'}>
-            {trailerMuted ? '🔇' : '🔊'}
-          </button>
-        )}
-        <div className="absolute bottom-0 left-0 right-0 pb-8 z-20">
-          <div className="page-gutter">
-            <div className="flex gap-6 items-end">
-              <div className="hidden md:block w-[240px] md:w-[280px] -mb-6">
-                <div className="rounded-xl overflow-hidden ring-1 ring-white/10 shadow-2xl">
-                  {poster ? <img src={poster} className="w-full h-auto object-cover" /> : <div className="aspect-[2/3] bg-neutral-800" />}
-                </div>
-              </div>
-              <div className="flex-1 hero-info">
-                <div className="hero-scrim" />
-                <div className="hero-content hero-grid">
-                  {/* Left column */}
-                  <div className="hero-col-left">
-                    <div className="text-xs tracking-wide text-brand mb-1">{kind==='movie' ? 'MOVIE' : (kind==='tv' ? 'TV SERIES' : 'TITLE')}</div>
-                    {logoUrl ? (
-                      <img src={logoUrl} alt={title} className="h-16 md:h-20 object-contain mb-3 drop-shadow-[0_6px_24px_rgba(0,0,0,.6)]" />
-                    ) : (
-                      <h1 className="text-5xl md:text-7xl font-extrabold mb-3 title-shadow">{title}</h1>
-                    )}
-                    <div className="flex gap-2 mb-4 items-center">
-                    {(() => {
-                      const playable = id?.startsWith('plex:') || !!plexMappedId;
-                      return (
-                        <button
-                          onClick={playSelected}
-                          disabled={!playable}
-                          className={`cta-primary ${!playable ? 'opacity-60 cursor-not-allowed' : ''}`}
-                          title={playable ? 'Play' : 'No local source'}
-                        >
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="mr-2"><path d="M8 5v14l11-7z"/></svg>
-                          Play
-                        </button>
-                      );
-                    })()}
-                    <button className="cta-ghost" title="Add to My List">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="mr-1"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></svg>
-                      Add
-                    </button>
-                    <button className="cta-ghost" title="Mark Watched">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="mr-1"><path d="M9 16.17l-3.88-3.88L4 13.41 9 18.41 20 7.41 18.59 6l-9.59 9.59z"/></svg>
-                      Watched
-                    </button>
-                  </div>
-                    <div className="text-sm text-neutral-300 mb-3 flex flex-wrap items-center gap-2">
-                      {year && <span className="chip">{year}</span>}
-                      {meta.runtime ? <span className="chip">{meta.runtime} min</span> : null}
-                      {meta.rating && <span className="chip">{meta.rating}</span>}
-                      {badges.map((b)=> <span key={b} className="chip">{b}</span>)}
-                    </div>
-                    {overview && <p className="max-w-3xl text-neutral-300 mb-2">{overview}</p>}
-                    {/* Media info toggle if we have Plex tech */}
-                    {versions.length>0 && (
-                      <div className="mt-2">
-                        <button className="text-sm text-neutral-300 hover:text-white underline" onClick={()=> setShowMediaInfo(v=>!v)}>
-                          {showMediaInfo ? 'Hide media info' : 'Show media info'}
-                        </button>
-                        {showMediaInfo && (
-                          <div className="mt-2 text-sm text-neutral-300">
-                            {/* Version tabs */}
-                            {versionDetails.length>0 && (
-                              <div className="mb-2 flex flex-wrap gap-2">
-                                {versionDetails.map(v => (
-                                  <button key={v.id} onClick={()=> { setInfoVersion(v.id); setActiveVersion(v.id); setAudioTracks(v.audios); setSubtitleTracks(v.subs); }}
-                                    className={`h-8 px-3 rounded-full text-xs ring-1 ${infoVersion===v.id? 'bg-white text-black ring-white/0':'bg-white/5 text-neutral-200 hover:bg-white/10 ring-white/10'}`}
-                                  >{v.label}</button>
-                                ))}
-                              </div>
-                            )}
-                            <div className="mb-2">
-                              <span className="meta-label mr-2">Audio:</span>
-                              {(versionDetails.find(v=>v.id===infoVersion)?.audios || audioTracks || []).map((a:any,i:number)=> <span key={i} className="chip">{a.label}</span>)}
-                            </div>
-                            <div className="mb-2">
-                              <span className="meta-label mr-2">Subtitles:</span>
-                              {(versionDetails.find(v=>v.id===infoVersion)?.subs || subtitleTracks || []).map((s:any,i:number)=> <span key={i} className="chip">{s.label}</span>)}
-                            </div>
-                            <TechnicalChips info={(versionDetails.find(v=>v.id===infoVersion)?.tech) || {
-                              rating: meta.rating,
-                              runtimeMin: meta.runtime,
-                              videoCodec: tech.videoCodec, videoProfile: tech.videoProfile, resolution: tech.resolution,
-                              bitrateKbps: tech.bitrateKbps, audioCodec: tech.audioCodec, audioChannels: tech.audioChannels,
-                              fileSizeMB: tech.fileSizeMB, subsCount: tech.subsCount,
-                            }} />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {/* Right column */}
-                  <div className="hero-col-right right-list hidden md:block md:absolute md:right-6 md:bottom-4 md:max-w-[40vw]">
-                    {cast.length>0 && (
-                      <div className="mb-3">
-                        <div className="meta-label mb-1">Cast</div>
-                        <div className="flex flex-wrap gap-2 max-w-xl">
-                          {cast.slice(0,6).map((c,i)=>(
-                            <button key={i} onClick={()=> { setPersonId(c.id); setPersonName(c.name); setPersonOpen(true); }} className="underline text-neutral-200 hover:text-white">
-                              {c.name}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  {meta.genres && meta.genres.length>0 && (
-                    <div className="mb-3">
-                      <div className="meta-label mb-1">Genres</div>
-                      <div className="flex flex-wrap gap-2">
-                        {meta.genres.map((g,i)=>(<span key={i} className="chip">{g}</span>))}
-                      </div>
-                    </div>
-                  )}
-                  {moodTags.length>0 && (
-                    <div>
-                      <div className="meta-label mb-1">{kind==='tv' ? 'This Series Is' : 'This Movie Is'}</div>
-                      <div className="flex flex-wrap gap-2">
-                        {moodTags.map((t,i)=>(<span key={i} className="chip">{t}</span>))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      <div className="page-gutter py-6 space-y-6">
-        {seasons.length>0 && (
-          <div className="flex items-center gap-3">
-            <div className="text-sm text-neutral-400">Season</div>
-            <select className="input w-40" value={seasonKey} onChange={(e)=> setSeasonKey(e.target.value)}>
-              {seasons.map(s=> <option key={s.key} value={s.key}>{s.title}</option>)}
+
+      {/* Modern Hero Section */}
+      <DetailsHero
+        title={title}
+        overview={overview}
+        backdrop={backdrop || `https://picsum.photos/seed/details-${id}/1920/1080`}
+        poster={poster}
+        logo={logoUrl}
+        year={year}
+        rating={meta.rating}
+        runtime={meta.runtime}
+        genres={meta.genres}
+        badges={badges}
+        cast={cast}
+        moodTags={moodTags}
+        kind={kind}
+        hasMediaInfo={versions.length > 0}
+        onToggleMediaInfo={() => setShowMediaInfo(v => !v)}
+        showMediaInfo={showMediaInfo}
+        versionDetails={versionDetails}
+        infoVersion={infoVersion}
+        onVersionChange={(id) => {
+          setInfoVersion(id);
+          setActiveVersion(id);
+          const v = versionDetails.find(vd => vd.id === id);
+          if (v) {
+            setAudioTracks(v.audios);
+            setSubtitleTracks(v.subs);
+          }
+        }}
+        playable={id?.startsWith('plex:') || !!plexMappedId}
+        onPlay={playSelected}
+        onAddToList={() => setToast('Added to My List')}
+        onMarkWatched={() => setToast('Marked as Watched')}
+        onPersonClick={(person) => {
+          setPersonId(person.id);
+          setPersonName(person.name);
+          setPersonOpen(true);
+        }}
+        trailerUrl={plexTrailerUrl}
+        trailerKey={trailerKey}
+        trailerMuted={trailerMuted}
+        showTrailer={showTrailer}
+        onToggleMute={toggleMute}
+      />
+      {/* Tabs Navigation */}
+      <DetailsTabs
+        tabs={tabsData}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+      {/* Content Section Below Hero */}
+      <div className="px-4 md:px-8 lg:px-12 xl:px-16 py-8">
+        {/* Season Selector */}
+        {activeTab === 'EPISODES' && seasons.length > 0 && (
+          <div className="mb-6">
+            <select
+              className="px-4 py-2 bg-white/10 text-white rounded-lg backdrop-blur-sm border border-white/20 hover:bg-white/20 transition-colors"
+              value={seasonKey}
+              onChange={(e) => setSeasonKey(e.target.value)}
+            >
+              {seasons.map(s => (
+                <option key={s.key} value={s.key} className="bg-black">
+                  {s.title}
+                </option>
+              ))}
             </select>
           </div>
         )}
-        {/* Below-hero meta block removed to prevent duplicate info */}
-        <Tabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
-        {activeTab==='EPISODES' && seasons.length>0 && (
-          <section className="mt-4 space-y-3">
-            {episodes.length ? episodes.map((e:any, idx:number)=> (
-              <EpisodeItem key={e.id||idx} ep={{...e, index: idx+1}} onClick={(eid)=> nav(`/player/${encodeURIComponent(eid)}`)} />
-            )) : <EpisodeSkeletonList />}
+
+        {/* Tab Content */}
+        {activeTab === 'EPISODES' && seasons.length > 0 && (
+          <section className="space-y-4">
+            {episodes.length ? (
+              episodes.map((e: any, idx: number) => (
+                <EpisodeItem
+                  key={e.id || idx}
+                  ep={{ ...e, index: idx + 1 }}
+                  onClick={(eid) => nav(`/player/${encodeURIComponent(eid)}`)}
+                />
+              ))
+            ) : (
+              <EpisodeSkeletonList />
+            )}
           </section>
         )}
-        {activeTab==='RECOMMENDATIONS' && (
-          <section className="mt-4">
-            {related.length>0 ? (
+
+        {activeTab === 'SUGGESTED' && (
+          <section className="space-y-8">
+            {related.length > 0 ? (
               <>
                 <Row
                   title="Recommendations"
                   items={related as any}
                   browseKey={tmdbCtx?.id ? `tmdb:recs:${tmdbCtx.media}:${tmdbCtx.id}` : undefined}
-                  onItemClick={(id)=> nav(`/details/${encodeURIComponent(id)}`)}
+                  onItemClick={(id) => nav(`/details/${encodeURIComponent(id)}`)}
                 />
-                {similar.length>0 && (
+                {similar.length > 0 && (
                   <Row
                     title="More Like This"
                     items={similar as any}
                     browseKey={tmdbCtx?.id ? `tmdb:similar:${tmdbCtx.media}:${tmdbCtx.id}` : undefined}
-                    onItemClick={(id)=> nav(`/details/${encodeURIComponent(id)}`)}
+                    onItemClick={(id) => nav(`/details/${encodeURIComponent(id)}`)}
                   />
                 )}
               </>
-            ) : <SkeletonRow />}
+            ) : (
+              <SkeletonRow />
+            )}
           </section>
         )}
-        {activeTab==='INFO' && (
-          <section className="mt-4">
-            <TechnicalChips info={{
-              rating: meta.rating,
-              runtimeMin: meta.runtime,
-              videoCodec: tech.videoCodec, videoProfile: tech.videoProfile, resolution: tech.resolution,
-              bitrateKbps: tech.bitrateKbps, audioCodec: tech.audioCodec, audioChannels: tech.audioChannels,
-              fileSizeMB: tech.fileSizeMB, subsCount: tech.subsCount,
-            }} />
-            <div className="mt-6">
-              <h2 className="text-lg font-semibold mb-2">Cast</h2>
-              <div className="flex gap-3  no-scrollbar">
-                {cast.length ? cast.map((c, i) => (
-                  <button key={i} onClick={()=> { setPersonId(c.id); setPersonName(c.name); setPersonOpen(true); }} className="flex-shrink-0 w-28 text-center">
-                    <div className="w-28 h-28 rounded-full overflow-hidden bg-neutral-800 mb-1">
-                      {c.img ? <img src={c.img} className="w-full h-full object-cover" /> : null}
-                    </div>
-                    <div className="text-sm">{c.name}</div>
-                  </button>
-                )) : Array.from({ length: 12 }).map((_, i) => (
-                  <div key={i} className="flex-shrink-0 w-28 text-center">
-                    <div className="w-28 h-28 rounded-full overflow-hidden bg-neutral-800 mb-1" />
-                    <div className="text-sm">Actor {i + 1}</div>
-                  </div>
-                ))}
-              </div>
+
+        {activeTab === 'EXTRAS' && (
+          <section className="text-white/50 text-center py-12">
+            <p>No extras available</p>
+          </section>
+        )}
+
+        {activeTab === 'DETAILS' && (
+          <section className="space-y-8">
+            {/* Technical Details */}
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-4">Technical Details</h3>
+              <TechnicalChips
+                info={{
+                  rating: meta.rating,
+                  runtimeMin: meta.runtime,
+                  videoCodec: tech.videoCodec,
+                  videoProfile: tech.videoProfile,
+                  resolution: tech.resolution,
+                  bitrateKbps: tech.bitrateKbps,
+                  audioCodec: tech.audioCodec,
+                  audioChannels: tech.audioChannels,
+                  fileSizeMB: tech.fileSizeMB,
+                  subsCount: tech.subsCount,
+                }}
+              />
             </div>
+
+            {/* Full Cast */}
+            {cast.length > 0 && (
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-4">Cast & Crew</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  {cast.map((c, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setPersonId(c.id);
+                        setPersonName(c.name);
+                        setPersonOpen(true);
+                      }}
+                      className="text-center hover:opacity-80 transition-opacity"
+                    >
+                      <div className="aspect-square rounded-lg overflow-hidden bg-white/10 mb-2">
+                        {c.img ? (
+                          <img src={c.img} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-white/20">
+                            <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-sm text-white/80">{c.name}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
-        )}
-        {activeTab==='REVIEWS' && (
-          <section className="mt-4 page-gutter text-neutral-400">Reviews coming soon.</section>
         )}
       </div>
       <PersonModal open={personOpen} onClose={()=> setPersonOpen(false)} personId={personId} name={personName} tmdbKey={loadSettings().tmdbBearer} />
