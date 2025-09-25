@@ -69,8 +69,14 @@ export default function Details() {
     async function load() {
       if (!id) return;
       try {
-        // Reset mapped state when navigating to a different details item
+        // Reset all state when navigating to a different details item
         setPlexMappedId(undefined);
+        setShowTrailer(false);
+        setTrailerKey(undefined);
+        setPlexTrailerUrl(undefined);
+        setTrailerMuted(true);
+        setBackdrop('');
+        setLogoUrl(undefined);
         if (id.startsWith('plex:') && s.plexBaseUrl && s.plexToken) {
           const rk = id.replace(/^plex:/, '');
           const meta: any = await plexMetadata({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk);
@@ -442,11 +448,12 @@ export default function Details() {
   };
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-home-gradient">
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
 
       {/* Modern Hero Section */}
       <DetailsHero
+        key={id} // Force re-render when ID changes
         title={title}
         overview={overview}
         backdrop={backdrop || `https://picsum.photos/seed/details-${id}/1920/1080`}

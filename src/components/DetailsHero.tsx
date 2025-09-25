@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 interface DetailsHeroProps {
@@ -79,6 +79,38 @@ export default function DetailsHero({
   onToggleMute,
 }: DetailsHeroProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [localShowTrailer, setLocalShowTrailer] = useState(showTrailer);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Reset trailer state when title changes (detected by backdrop/trailer change)
+  useEffect(() => {
+    setLocalShowTrailer(showTrailer);
+  }, [showTrailer, trailerUrl, trailerKey, backdrop]);
+
+  // Handle video ended event
+  const handleVideoEnded = () => {
+    setLocalShowTrailer(false);
+  };
+
+  // Handle YouTube iframe ended event
+  useEffect(() => {
+    if (!localShowTrailer || !trailerKey) return;
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== 'https://www.youtube.com') return;
+
+      try {
+        const data = JSON.parse(event.data);
+        // YouTube Player State: 0 = ended
+        if (data.event === 'infoDelivery' && data.info?.playerState === 0) {
+          setLocalShowTrailer(false);
+        }
+      } catch {}
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [localShowTrailer, trailerKey]);
 
   // Metadata badges
   const metaBadges = [];
@@ -96,24 +128,26 @@ export default function DetailsHero({
             src={backdrop}
             alt=""
             className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${
-              imageLoaded && !showTrailer ? 'opacity-100' : 'opacity-0'
+              imageLoaded && !localShowTrailer ? 'opacity-100' : 'opacity-0'
             }`}
             onLoad={() => setImageLoaded(true)}
           />
         )}
 
         {/* Trailer overlay */}
-        {showTrailer && (trailerUrl || trailerKey) && (
+        {localShowTrailer && (trailerUrl || trailerKey) && (
           <div className="absolute inset-0">
             {trailerUrl ? (
               <video
+                ref={videoRef}
                 id="hero-trailer-video"
                 className="w-full h-full object-cover"
                 src={trailerUrl}
                 autoPlay
                 muted={trailerMuted}
-                loop
+                loop={false}
                 playsInline
+                onEnded={handleVideoEnded}
               />
             ) : trailerKey ? (
               <iframe
@@ -121,7 +155,7 @@ export default function DetailsHero({
                 className="absolute inset-0 w-full h-full scale-125 origin-center"
                 src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=${
                   trailerMuted ? 1 : 0
-                }&controls=0&loop=1&playsinline=1&rel=0&showinfo=0&modestbranding=1&playlist=${trailerKey}&enablejsapi=1`}
+                }&controls=0&loop=0&playsinline=1&rel=0&showinfo=0&modestbranding=1&enablejsapi=1&origin=${window.location.origin}`}
                 allow="autoplay; encrypted-media"
                 style={{ pointerEvents: 'none' }}
               />
@@ -337,7 +371,7 @@ export default function DetailsHero({
       </div>
 
       {/* Mute Button for Trailer */}
-      {showTrailer && (trailerUrl || trailerKey) && (
+      {localShowTrailer && (trailerUrl || trailerKey) && (
         <button
           onClick={onToggleMute}
           className="absolute bottom-8 right-8 p-3 bg-white/20 backdrop-blur-sm rounded-full hover:bg-white/30 transition-all"
