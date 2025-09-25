@@ -100,8 +100,18 @@ export default function DetailsHero({
       if (event.origin !== 'https://www.youtube.com') return;
 
       try {
-        const data = JSON.parse(event.data);
-        // YouTube Player State: 0 = ended
+        let data;
+        if (typeof event.data === 'string') {
+          data = JSON.parse(event.data);
+        } else {
+          data = event.data;
+        }
+
+        // YouTube Player State: 0 = ended, check multiple event types
+        if (data.event === 'onStateChange' && data.info === 0) {
+          setLocalShowTrailer(false);
+        }
+        // Alternative event structure
         if (data.event === 'infoDelivery' && data.info?.playerState === 0) {
           setLocalShowTrailer(false);
         }
@@ -119,7 +129,7 @@ export default function DetailsHero({
   if (rating) metaBadges.push(rating);
 
   return (
-    <div className="relative w-full min-h-[85vh] md:min-h-[90vh] overflow-hidden bg-black">
+    <div className="relative w-full min-h-[85vh] md:min-h-[90vh] overflow-hidden">
       {/* Background Image/Video Layer */}
       <div className="absolute inset-0">
         {/* Backdrop image */}
@@ -155,17 +165,30 @@ export default function DetailsHero({
                 className="absolute inset-0 w-full h-full scale-125 origin-center"
                 src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=${
                   trailerMuted ? 1 : 0
-                }&controls=0&loop=0&playsinline=1&rel=0&showinfo=0&modestbranding=1&enablejsapi=1&origin=${window.location.origin}`}
+                }&controls=0&loop=0&playsinline=1&rel=0&showinfo=0&modestbranding=1&enablejsapi=1&origin=${window.location.origin}&widget_referrer=${window.location.origin}`}
                 allow="autoplay; encrypted-media"
                 style={{ pointerEvents: 'none' }}
+                onLoad={() => {
+                  // Send API ready message to enable events
+                  const iframe = document.getElementById('hero-trailer-iframe') as HTMLIFrameElement;
+                  if (iframe && iframe.contentWindow) {
+                    setTimeout(() => {
+                      iframe.contentWindow?.postMessage(
+                        JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
+                        'https://www.youtube.com'
+                      );
+                    }, 1000);
+                  }
+                }}
               />
             ) : null}
           </div>
         )}
 
-        {/* Gradient Overlays */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black via-black/50 to-transparent" />
+        {/* Gradient Overlays - blend with bg-home-gradient */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/60 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#141414] via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#141414]" />
       </div>
 
       {/* Content Layer */}

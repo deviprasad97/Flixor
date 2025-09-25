@@ -448,11 +448,12 @@ export default function Details() {
   };
 
   return (
-    <div className="min-h-screen bg-home-gradient">
+    <div className="min-h-screen bg-home-gradient relative">
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
 
-      {/* Modern Hero Section */}
-      <DetailsHero
+      {/* Modern Hero Section - seamless blend */}
+      <div className="relative">
+        <DetailsHero
         key={id} // Force re-render when ID changes
         title={title}
         overview={overview}
@@ -496,6 +497,8 @@ export default function Details() {
         showTrailer={showTrailer}
         onToggleMute={toggleMute}
       />
+      </div>
+
       {/* Tabs Navigation */}
       <DetailsTabs
         tabs={tabsData}
