@@ -7,6 +7,16 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    proxy: {
+      '/api/trakt': {
+        target: 'https://api.trakt.tv',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/trakt/, ''),
+        headers: {
+          'trakt-api-version': '2'
+        }
+      }
+    }
   },
   build: {
     sourcemap: true,

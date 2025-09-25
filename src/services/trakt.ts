@@ -6,7 +6,8 @@ function isTauri() {
   return typeof window !== 'undefined' && window.__TAURI__ !== undefined;
 }
 
-const TRAKT = 'https://api.trakt.tv';
+// Use proxy in development to avoid CORS
+const TRAKT = import.meta.env.DEV ? '/api/trakt' : 'https://api.trakt.tv';
 const CLIENT_ID = '4ab0ead6d5510bf39180a5e1dd7b452f5ad700b7794564befdd6bca56e0f7ce4';
 const CLIENT_SECRET = '64d24f12e4628dcf0dda74a61f2235c086daaf8146384016b6a86c196e419c26';
 
@@ -99,8 +100,8 @@ export async function traktRequestDeviceCode(): Promise<TraktDeviceCode> {
     return invoke('trakt_device_code', { clientId: CLIENT_ID });
   }
 
-  // Web fallback - direct API call
-  const response = await fetch('https://api.trakt.tv/oauth/device/code', {
+  // Web fallback - use proxy in dev
+  const response = await fetch(`${TRAKT}/oauth/device/code`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -128,7 +129,7 @@ export async function traktPollForToken(deviceCode: string): Promise<TraktTokens
   }
 
   // Web fallback
-  const response = await fetch('https://api.trakt.tv/oauth/device/token', {
+  const response = await fetch(`${TRAKT}/oauth/device/token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -163,7 +164,7 @@ export async function traktRefreshToken(refreshToken: string): Promise<TraktToke
   }
 
   // Web fallback
-  const response = await fetch('https://api.trakt.tv/oauth/token', {
+  const response = await fetch(`${TRAKT}/oauth/token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -194,7 +195,7 @@ export async function traktRevokeToken(accessToken: string): Promise<void> {
   }
 
   // Web fallback
-  const response = await fetch('https://api.trakt.tv/oauth/revoke', {
+  const response = await fetch(`${TRAKT}/oauth/revoke`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -219,7 +220,7 @@ export async function traktGetUserProfile(accessToken: string): Promise<TraktUse
   }
 
   // Web fallback
-  const response = await fetch('https://api.trakt.tv/users/me', {
+  const response = await fetch(`${TRAKT}/users/me`, {
     headers: {
       'Authorization': `Bearer ${accessToken}`,
       'trakt-api-version': '2',
@@ -241,7 +242,7 @@ export async function traktGetUserSettings(accessToken: string): Promise<any> {
   }
 
   // Web fallback
-  const response = await fetch('https://api.trakt.tv/users/settings', {
+  const response = await fetch(`${TRAKT}/users/settings`, {
     headers: {
       'Authorization': `Bearer ${accessToken}`,
       'trakt-api-version': '2',
@@ -263,7 +264,7 @@ export async function traktScrobbleStart(accessToken: string, item: TraktScrobbl
     return invoke('trakt_scrobble_start', { accessToken, item });
   }
 
-  const response = await fetch('https://api.trakt.tv/scrobble/start', {
+  const response = await fetch(`${TRAKT}/scrobble/start`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -284,7 +285,7 @@ export async function traktScrobblePause(accessToken: string, item: TraktScrobbl
     return invoke('trakt_scrobble_pause', { accessToken, item });
   }
 
-  const response = await fetch('https://api.trakt.tv/scrobble/pause', {
+  const response = await fetch(`${TRAKT}/scrobble/pause`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -305,7 +306,7 @@ export async function traktScrobbleStop(accessToken: string, item: TraktScrobble
     return invoke('trakt_scrobble_stop', { accessToken, item });
   }
 
-  const response = await fetch('https://api.trakt.tv/scrobble/stop', {
+  const response = await fetch(`${TRAKT}/scrobble/stop`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -327,7 +328,7 @@ export async function traktGetHistory(accessToken: string, type?: 'movies' | 'sh
     return invoke('trakt_history', { accessToken, type, limit });
   }
 
-  let url = 'https://api.trakt.tv/users/me/history';
+  let url = `${TRAKT}/users/me/history`;
   if (type) url += `/${type}`;
   if (limit) url += `?limit=${limit}`;
 
@@ -349,7 +350,7 @@ export async function traktAddToHistory(accessToken: string, items: any[]): Prom
     return invoke('trakt_history_add', { accessToken, items });
   }
 
-  const response = await fetch('https://api.trakt.tv/sync/history', {
+  const response = await fetch(`${TRAKT}/sync/history`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -370,7 +371,7 @@ export async function traktRemoveFromHistory(accessToken: string, items: any[]):
     return invoke('trakt_history_remove', { accessToken, items });
   }
 
-  const response = await fetch('https://api.trakt.tv/sync/history/remove', {
+  const response = await fetch(`${TRAKT}/sync/history/remove`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -392,7 +393,7 @@ export async function traktGetWatchlist(accessToken: string, type?: 'movies' | '
     return invoke('trakt_watchlist', { accessToken, type });
   }
 
-  let url = 'https://api.trakt.tv/users/me/watchlist';
+  let url = `${TRAKT}/users/me/watchlist`;
   if (type) url += `/${type}`;
 
   const response = await fetch(url, {
@@ -413,7 +414,7 @@ export async function traktAddToWatchlist(accessToken: string, items: any[]): Pr
     return invoke('trakt_watchlist_add', { accessToken, items });
   }
 
-  const response = await fetch('https://api.trakt.tv/sync/watchlist', {
+  const response = await fetch(`${TRAKT}/sync/watchlist`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -434,7 +435,7 @@ export async function traktRemoveFromWatchlist(accessToken: string, items: any[]
     return invoke('trakt_watchlist_remove', { accessToken, items });
   }
 
-  const response = await fetch('https://api.trakt.tv/sync/watchlist/remove', {
+  const response = await fetch(`${TRAKT}/sync/watchlist/remove`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -456,7 +457,7 @@ export async function traktGetProgress(accessToken: string, type: 'shows', sort?
     return invoke('trakt_progress', { accessToken, type, sort });
   }
 
-  let url = `https://api.trakt.tv/users/me/watched/${type}/progress`;
+  let url = `${TRAKT}/users/me/watched/${type}/progress`;
   if (sort) url += `?sort=${sort}`;
 
   const response = await fetch(url, {
@@ -478,7 +479,7 @@ export async function traktGetRecommendations(accessToken: string, type: 'movies
     return invoke('trakt_recommendations', { accessToken, type, limit });
   }
 
-  let url = `https://api.trakt.tv/recommendations/${type}`;
+  let url = `${TRAKT}/recommendations/${type}`;
   if (limit) url += `?limit=${limit}`;
 
   const response = await fetch(url, {
@@ -501,7 +502,7 @@ export async function traktSearch(query: string, type?: 'movie' | 'show' | 'epis
   }
 
   const searchType = type || 'movie,show';
-  let url = `https://api.trakt.tv/search/${searchType}?query=${encodeURIComponent(query)}`;
+  let url = `${TRAKT}/search/${searchType}?query=${encodeURIComponent(query)}`;
   if (limit) url += `&limit=${limit}`;
 
   const response = await fetch(url, {
@@ -522,7 +523,7 @@ export async function traktTrending(type: 'movies'|'shows' = 'movies', limit?: n
     return invoke('trakt_trending', { kind: type, clientId: CLIENT_ID, limit });
   }
 
-  let url = `https://api.trakt.tv/${type}/trending`;
+  let url = `${TRAKT}/${type}/trending`;
   if (limit) url += `?limit=${limit}`;
 
   const response = await fetch(url, {
@@ -543,7 +544,7 @@ export async function traktPopular(type: 'movies' | 'shows', limit?: number): Pr
     return invoke('trakt_popular', { type, clientId: CLIENT_ID, limit });
   }
 
-  let url = `https://api.trakt.tv/${type}/popular`;
+  let url = `${TRAKT}/${type}/popular`;
   if (limit) url += `?limit=${limit}`;
 
   const response = await fetch(url, {
