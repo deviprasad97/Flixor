@@ -16,7 +16,7 @@ export default function Row({ title, items, variant = 'default', onItemClick, br
     <section className="py-2 my-5">
       <div className="page-gutter">
         <div className="row-band">
-          <div className="pt-4 px-5">
+          <div className="pt-4">
             <div className="flex items-baseline gap-3 group">
               <h2 className="text-neutral-200 font-semibold text-xl md:text-2xl cursor-default">{title}</h2>
               {browseKey && (
@@ -31,7 +31,7 @@ export default function Row({ title, items, variant = 'default', onItemClick, br
               )}
             </div>
           </div>
-          <div className="row-edge no-scrollbar overflow-x-auto" style={{padding: '20px'}}>
+          <div className="row-edge no-scrollbar overflow-x-auto" style={{ padding: '12px 0 16px 0' }}>
             <div className="flex gap-4 pb-4 w-max">
               
               {items.map((i) => variant === 'continue' ? (

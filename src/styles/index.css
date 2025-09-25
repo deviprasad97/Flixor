@@ -19,12 +19,32 @@ html, body, #root { overflow-x: hidden; }
 
 /* Utilities for Netflix-style UI */
 @layer components {
+  /* Top navigation background that fades with scroll */
+  .nav-bg {
+    position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background: linear-gradient(to bottom,
+      rgba(0,0,0, var(--nav-bg-o, 0)) 0%,
+      rgba(0,0,0, calc(var(--nav-bg-o, 0) * 0.6)) 60%,
+      rgba(0,0,0, 0) 100%
+    );
+    border-bottom: 1px solid rgba(255,255,255, calc(var(--nav-bg-o, 0) * 0.2));
+    backdrop-filter: blur(var(--nav-blur, 0));
+    -webkit-backdrop-filter: blur(var(--nav-blur, 0));
+    transition: background 200ms ease, border-color 200ms ease, backdrop-filter 200ms ease;
+  }
   .input { @apply px-3 py-2 rounded bg-neutral-900 border border-neutral-800 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-white/10; }
   .btn { @apply inline-flex items-center justify-center px-4 py-2 rounded bg-white/10 hover:bg-white/20 text-sm font-medium; }
   .btn-primary { @apply bg-brand hover:bg-brand-600 text-white; }
   .section { @apply px-4 md:px-6 lg:px-10 py-4; }
   .container { @apply max-w-7xl mx-auto; }
-  .bg-app-gradient { background: radial-gradient(1200px 50% at 50% -10%, rgba(255,255,255,0.08), transparent), linear-gradient(to bottom, #0b0b0b, #141414); }
+  /* App-wide background now matches the former row-band treatment */
+  .bg-app-gradient {
+    background:
+      radial-gradient(1200px 50% at 50% -10%, rgba(255,255,255,0.06), transparent),
+      /* warm subtle tint similar to Netflix rows */
+      linear-gradient(180deg, rgba(110, 60, 40, .22) 0%, rgba(40, 20, 16, .18) 40%, rgba(20,20,20,.0) 100%),
+      linear-gradient(to bottom, #0b0b0b, #141414);
+  }
   .card { @apply rounded-xl overflow-hidden ring-1 ring-white/5 bg-neutral-900/30; box-shadow: 0 16px 40px rgba(0,0,0,.55), 0 6px 18px rgba(0,0,0,.35); }
   .card-hover { transition: transform 300ms ease, box-shadow 300ms ease; }
   .card-hover:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 24px 60px rgba(0,0,0,.65), 0 8px 20px rgba(0,0,0,.45); }
@@ -36,11 +56,9 @@ html, body, #root { overflow-x: hidden; }
   @media (min-width: 768px) { .page-gutter { padding-left: 14px; padding-right: 14px; } }
   /* Viewport bleed that does not create horizontal scroll */
   .bleed { width: 100vw; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); }
-  .row-band { position: relative; border-radius: 22px; overflow: hidden; border: 1px solid rgba(255,255,255,.06); background:
-    radial-gradient(1200px 50% at 50% -10%, rgba(255,255,255,0.06), transparent),
-    linear-gradient(180deg, rgba(110, 60, 40, .22) 0%, rgba(40, 20, 16, .18) 40%, rgba(20,20,20,.0) 100%);
-    box-shadow: 0 20px 60px rgba(0,0,0,.55), 0 6px 16px rgba(0,0,0,.35);
-  }
+  /* Row band used to render a boxed background per row.
+     We’re de-emphasizing it so rows flow over the page background. */
+  .row-band { position: relative; border-radius: 22px; overflow: visible; border: 0; background: transparent; box-shadow: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
 }

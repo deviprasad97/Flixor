@@ -231,7 +231,8 @@ export default function Home() {
 
   return (
     <div className="pb-10 bg-app-gradient">
-      <div className="pt-16" />
+      {/* Spacer to separate hero from transparent nav */}
+      <div className="pt-24" />
       {hero ? (
         <HomeHero
           title={hero.title}

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { loadSettings, saveSettings } from '@/state/settings';
 import { forget } from '@/services/cache';
 import { refreshPlexServers } from '@/services/plextv_auth';
@@ -18,6 +18,7 @@ export default function TopNav() {
   const [open, setOpen] = useState(false);
   const [servers, setServers] = useState<Array<{ name: string; clientIdentifier: string; bestUri: string; token: string }>>([]);
   const [current, setCurrent] = useState<{ name: string } | null>(null);
+  const headerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const s = loadSettings();
@@ -25,16 +26,58 @@ export default function TopNav() {
     if (s.plexServers) setServers(s.plexServers);
   }, []);
 
+  const isHome = pathname === '/';
+
+  // Track scroll and drive background fade with rAF for smoothness
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    let current = isHome ? 0 : 1; // start fully transparent on Home, opaque elsewhere
+    let target = current;
+    let rafId: number | null = null;
+
+    const setVars = (v: number) => {
+      el.style.setProperty('--nav-bg-o', String(0.85 * v));
+      el.style.setProperty('--nav-blur', `${10 * v}px`);
+    };
+    setVars(current);
+
+    const animate = () => {
+      current += (target - current) * 0.18;
+      if (Math.abs(target - current) < 0.005) {
+        current = target;
+        setVars(current);
+        rafId = null;
+        return;
+      }
+      setVars(current);
+      rafId = requestAnimationFrame(animate);
+    };
+
+    const onScroll = () => {
+      const y = window.scrollY || 0;
+      target = isHome ? Math.min(1, y / 120) : 1;
+      if (rafId == null) rafId = requestAnimationFrame(animate);
+    };
+    // initialize based on current scroll
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true } as any);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (rafId != null) cancelAnimationFrame(rafId);
+    };
+  }, [pathname, isHome]);
+
   async function doRefresh() {
     const list = await refreshPlexServers();
     setServers(list);
     saveSettings({ plexServers: list });
   }
   return (
-    <header className="sticky top-0 z-50 backdrop-blur-md">
-      <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/10 to-transparent pointer-events-none" />
-      <div className="relative border-b border-white/5">
-        <div className="page-gutter py-3.5 flex items-center gap-8">
+    <header className="fixed top-0 left-0 right-0 z-50">
+      <div ref={headerRef} className="relative h-16">
+        <div className="nav-bg" />
+        <div className="page-gutter h-16 flex items-center gap-8 relative z-10">
           <Link to="/" className="text-2xl font-extrabold tracking-tight text-brand">NETFLIX</Link>
           <nav className="hidden md:flex gap-6 text-sm text-neutral-300">
             {items.map((it) => (
