@@ -287,7 +287,9 @@ export default function Home() {
           onMoreInfo={() => { if (hero.id) nav(`/details/${encodeURIComponent(hero.id)}`); }}
         />
       ) : (
-        <div className="relative w-full min-h-[85vh] md:min-h-[90vh] bg-neutral-900/40 skeleton" />
+        <div className="bleed" style={{ padding: '20px' }}>
+          <div className="rounded-2xl overflow-hidden ring-1 ring-white/10 bg-neutral-900/40 h-[56vh] md:h-[64vh] xl:h-[68vh] skeleton" />
+        </div>
       )}
       <div className="mt-6" />
       {needsPlex && (
