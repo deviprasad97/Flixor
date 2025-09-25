@@ -8,8 +8,8 @@ const items = [
   { to: '/', label: 'Home' },
   { to: '/library?tab=tv', label: 'TV Shows' },
   { to: '/library?tab=movies', label: 'Movies' },
-  { to: '/library?tab=new', label: 'New & Popular' },
-  { to: '/library?tab=mylist', label: 'My List' },
+  { to: '/new-popular', label: 'New & Popular' },
+  { to: '/my-list', label: 'My List' },
   { to: '/library?tab=langs', label: 'Browse by Languages' },
 ];
 

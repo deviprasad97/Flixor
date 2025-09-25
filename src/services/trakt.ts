@@ -1,4 +1,5 @@
 import { loadSettings, saveSettings } from '@/state/settings';
+import { cached } from '@/services/cache';
 
 // Check if running in Tauri context
 function isTauri() {
@@ -556,6 +557,42 @@ export async function traktPopular(type: 'movies' | 'shows', limit?: number): Pr
 
   if (!response.ok) throw new Error(`Failed to get popular: ${response.status}`);
   return response.json();
+}
+
+// Most Watched (charts) with period: daily | weekly | monthly | yearly | all
+export async function traktMostWatched(type: 'movies'|'shows', period: 'daily'|'weekly'|'monthly'|'yearly'|'all' = 'weekly', limit?: number): Promise<any[]> {
+  // Tauri path if available
+  if (isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    // No dedicated tauri cmd; use web fallback
+  }
+  const urlBase = `${TRAKT}/${type}/watched/${period}`;
+  const url = limit ? `${urlBase}?limit=${limit}` : urlBase;
+  // 30m TTL
+  return cached(`trakt:mostwatched:${type}:${period}:${limit||'all'}`, 30 * 60 * 1000, async () => {
+    const res = await fetch(url, {
+      headers: { 'trakt-api-version': '2', 'trakt-api-key': CLIENT_ID }
+    });
+    if (!res.ok) throw new Error(`Failed to get most watched: ${res.status}`);
+    return res.json();
+  });
+}
+
+// Anticipated (most lists)
+export async function traktAnticipated(type: 'movies'|'shows', limit?: number): Promise<any[]> {
+  if (isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    // No dedicated tauri cmd; use web fallback
+  }
+  const urlBase = `${TRAKT}/${type}/anticipated`;
+  const url = limit ? `${urlBase}?limit=${limit}` : urlBase;
+  return cached(`trakt:anticipated:${type}:${limit||'all'}`, 30 * 60 * 1000, async () => {
+    const res = await fetch(url, {
+      headers: { 'trakt-api-version': '2', 'trakt-api-key': CLIENT_ID }
+    });
+    if (!res.ok) throw new Error(`Failed to get anticipated: ${res.status}`);
+    return res.json();
+  });
 }
 
 // Token Management Helpers

@@ -1,5 +1,6 @@
 export type PlexConfig = { baseUrl: string; token: string };
 import { cached } from './cache';
+import { loadSettings } from '@/state/settings';
 
 export async function plexLibs(cfg: PlexConfig) {
   // Prefer backend invoke for Plex due to CORS restrictions on many servers
@@ -346,4 +347,73 @@ export async function plexPlayQueue(cfg: PlexConfig, itemId: string) {
   const res = await fetch(url, { method: 'POST', headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Failed to create play queue: ${res.status}`);
   return res.json();
+}
+
+// Recently added across libraries (web convenience)
+export async function plexRecentlyAdded(days: number = 7, limitPerLib: number = 50): Promise<any[]> {
+  try {
+    const s = loadSettings();
+    if (!s.plexBaseUrl || !s.plexToken) return [];
+    const cfg = { baseUrl: s.plexBaseUrl!, token: s.plexToken! };
+    const libs: any = await plexLibs(cfg);
+    const dirs = libs?.MediaContainer?.Directory || [];
+    const since = Date.now() - days * 24 * 60 * 60 * 1000;
+    const all: any[] = [];
+    for (const d of dirs) {
+      if (d.type !== 'movie' && d.type !== 'show') continue;
+      try {
+        const qs = `?type=${d.type === 'movie' ? 1 : 2}&sort=addedAt:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=${limitPerLib}`;
+        const res: any = await plexSectionAll(cfg, String(d.key), qs);
+        const meta: any[] = res?.MediaContainer?.Metadata || [];
+        for (const m of meta) {
+          const added = (m.addedAt ? (Number(m.addedAt) * 1000) : 0);
+          if (!added || added >= since) all.push(m);
+        }
+      } catch {}
+    }
+    // Sort globally by addedAt desc and cap
+    all.sort((a:any,b:any)=> (b.addedAt||0) - (a.addedAt||0));
+    return all.slice(0, 100);
+  } catch {
+    return [];
+  }
+}
+
+// Popular on Plex across libraries
+export async function plexPopular(limitPerLib: number = 50): Promise<any[]> {
+  try {
+    const s = loadSettings();
+    if (!s.plexBaseUrl || !s.plexToken) return [];
+    const cfg = { baseUrl: s.plexBaseUrl!, token: s.plexToken! };
+    const libs: any = await plexLibs(cfg);
+    const dirs = libs?.MediaContainer?.Directory || [];
+    const all: any[] = [];
+    for (const d of dirs) {
+      if (d.type !== 'movie' && d.type !== 'show') continue;
+      let res: any = null;
+      // Try lastViewedAt first, then viewCount
+      try {
+        const qs = `?type=${d.type === 'movie' ? 1 : 2}&sort=lastViewedAt:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=${limitPerLib}`;
+        res = await plexSectionAll(cfg, String(d.key), qs);
+      } catch {}
+      if (!res) {
+        try {
+          const qs2 = `?type=${d.type === 'movie' ? 1 : 2}&sort=viewCount:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=${limitPerLib}`;
+          res = await plexSectionAll(cfg, String(d.key), qs2);
+        } catch {}
+      }
+      const meta: any[] = res?.MediaContainer?.Metadata || [];
+      all.push(...meta);
+    }
+    // Prefer items with lastViewedAt/viewCount and recent activity
+    const score = (m:any) => {
+      const lv = (m.lastViewedAt||0);
+      const vc = (m.viewCount||0);
+      return (lv * 10) + vc;
+    };
+    all.sort((a:any,b:any)=> score(b) - score(a));
+    return all.slice(0, 100);
+  } catch {
+    return [];
+  }
 }

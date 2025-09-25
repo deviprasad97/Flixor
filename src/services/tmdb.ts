@@ -18,10 +18,11 @@ export async function tmdbTrending(key: string, media: 'movie'|'tv' = 'movie', w
   if (window.__TAURI__) {
     // @ts-ignore
     const { invoke } = await import('@tauri-apps/api/core');
-    return cached(`tmdb:trending:${media}:${window}`, 10 * 60 * 1000, async () =>
+    // 30m TTL for feeds
+    return cached(`tmdb:trending:${media}:${window}`, 30 * 60 * 1000, async () =>
       await (invoke('tmdb_trending', { media, window, bearer: token }) as Promise<{ results: TmdbTrendingItem[] }>));
   }
-  return cached(`tmdb:trending:${media}:${window}`, 10 * 60 * 1000, async () => {
+  return cached(`tmdb:trending:${media}:${window}`, 30 * 60 * 1000, async () => {
     const res = await fetch(`${TMDB}/trending/${media}/${window}`, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) throw new Error(`TMDB error ${res.status}`);
     return res.json();
@@ -168,4 +169,17 @@ export async function tmdbBestBackdropUrl(key: string, media: 'movie'|'tv', id: 
     const sel = en || nul || any;
     return sel?.file_path ? tmdbImage(sel.file_path, 'original') : undefined;
   } catch { return undefined; }
+}
+
+// Upcoming movies (regionalized)
+export async function tmdbUpcoming(key: string, region?: string) {
+  const token = normalizeBearer(key);
+  const r = region ? `&region=${encodeURIComponent(region)}` : '';
+  // 30m TTL
+  return cached(`tmdb:upcoming:${region || 'any'}`, 30 * 60 * 1000, async () => {
+    const url = `${TMDB}/movie/upcoming?language=en-US${r}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
+    return res.json();
+  });
 }
