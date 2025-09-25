@@ -10,7 +10,7 @@ interface DetailsTabsProps {
 
 export default function DetailsTabs({ tabs, activeTab, onTabChange }: DetailsTabsProps) {
   return (
-    <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-md border-b border-white/10">
+    <div className="sticky top-0 z-20 backdrop-blur-md border-b border-white/10">
       <div className="px-4 md:px-8 lg:px-12 xl:px-16">
         <div className="flex items-center gap-8 overflow-x-auto scrollbar-hide">
           {tabs.map(tab => (
