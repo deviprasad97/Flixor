@@ -448,11 +448,13 @@ export default function Details() {
   };
 
   return (
-    <div className="min-h-screen bg-home-gradient relative">
+    <div className="min-h-screen bg-home-gradient">
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
 
       {/* Modern Hero Section - seamless blend */}
-      <div className="relative">
+      <div className="relative" style={{
+        background: 'linear-gradient(to bottom, transparent 0%, transparent 70%, #0b0b0b 100%)'
+      }}>
         <DetailsHero
         key={id} // Force re-render when ID changes
         title={title}

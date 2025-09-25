@@ -134,14 +134,20 @@ export default function DetailsHero({
       <div className="absolute inset-0">
         {/* Backdrop image */}
         {backdrop && (
-          <img
-            src={backdrop}
-            alt=""
-            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${
-              imageLoaded && !localShowTrailer ? 'opacity-100' : 'opacity-0'
-            }`}
-            onLoad={() => setImageLoaded(true)}
-          />
+          <div className="absolute inset-0">
+            <img
+              src={backdrop}
+              alt=""
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${
+                imageLoaded && !localShowTrailer ? 'opacity-100' : 'opacity-0'
+              }`}
+              style={{
+                maskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 60%, rgba(0,0,0,0.8) 80%, rgba(0,0,0,0) 100%)',
+                WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 60%, rgba(0,0,0,0.8) 80%, rgba(0,0,0,0) 100%)'
+              }}
+              onLoad={() => setImageLoaded(true)}
+            />
+          </div>
         )}
 
         {/* Trailer overlay */}
@@ -152,6 +158,10 @@ export default function DetailsHero({
                 ref={videoRef}
                 id="hero-trailer-video"
                 className="w-full h-full object-cover"
+                style={{
+                  maskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 60%, rgba(0,0,0,0.8) 80%, rgba(0,0,0,0) 100%)',
+                  WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 60%, rgba(0,0,0,0.8) 80%, rgba(0,0,0,0) 100%)'
+                }}
                 src={trailerUrl}
                 autoPlay
                 muted={trailerMuted}
@@ -160,9 +170,16 @@ export default function DetailsHero({
                 onEnded={handleVideoEnded}
               />
             ) : trailerKey ? (
-              <iframe
-                id="hero-trailer-iframe"
-                className="absolute inset-0 w-full h-full scale-125 origin-center"
+              <div
+                className="absolute inset-0 w-full h-full"
+                style={{
+                  maskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 60%, rgba(0,0,0,0.8) 80%, rgba(0,0,0,0) 100%)',
+                  WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 60%, rgba(0,0,0,0.8) 80%, rgba(0,0,0,0) 100%)'
+                }}
+              >
+                <iframe
+                  id="hero-trailer-iframe"
+                  className="absolute inset-0 w-full h-full scale-125 origin-center"
                 src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=${
                   trailerMuted ? 1 : 0
                 }&controls=0&loop=0&playsinline=1&rel=0&showinfo=0&modestbranding=1&enablejsapi=1&origin=${window.location.origin}&widget_referrer=${window.location.origin}`}
@@ -180,15 +197,22 @@ export default function DetailsHero({
                     }, 1000);
                   }
                 }}
-              />
+                />
+              </div>
             ) : null}
           </div>
         )}
 
-        {/* Gradient Overlays - blend with bg-home-gradient */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/60 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#141414] via-transparent to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#141414]" />
+        {/* Gradient Overlays - seamless blend */}
+        <div className="absolute inset-0">
+          {/* Bottom fade - matches page background */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b0b] via-[#0b0b0b]/80 via-50% to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/40 via-60% to-transparent" />
+          {/* Side fade for content readability */}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 via-50% to-transparent" />
+          {/* Extra bottom blend for seamless transition */}
+          <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#0b0b0b] to-transparent" />
+        </div>
       </div>
 
       {/* Content Layer */}
