@@ -51,7 +51,7 @@ export default function ContinueCard({ id, title, image, progress, onClick }: Pr
 
   return (
     <button onClick={() => onClick?.(id)} className="group flex-shrink-0 w-[360px] md:w-[420px]">
-      <div className="relative aspect-[2/1] card card-hover">
+      <div className="relative aspect-[2/1] card card-hover ring-1 ring-white/15 hover:ring-2 hover:ring-white/90 hover:ring-offset-2 hover:ring-offset-transparent transition-all duration-200 group-hover:z-20">
         <img src={src} alt={title} className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
         <div className="absolute inset-x-0 bottom-0 h-1.5 bg-black/50">
           <div className="h-full bg-brand" style={{ width: pct + '%' }} />

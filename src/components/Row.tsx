@@ -32,7 +32,7 @@ export default function Row({ title, items, variant = 'default', onItemClick, br
             </div>
           </div>
           <div className="row-edge no-scrollbar overflow-x-auto" style={{ padding: '12px 0 16px 0' }}>
-            <div className="flex gap-4 pb-4 w-max">
+            <div className="flex gap-8 pb-4 w-max">
               
               {items.map((i) => variant === 'continue' ? (
                 <ContinueCard key={i.id} id={i.id} title={i.title} image={i.image!} progress={i.progress ?? 0} onClick={(id) => onItemClick?.(id)} />

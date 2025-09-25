@@ -78,11 +78,15 @@ export default function TopNav() {
         <div className="page-gutter h-16 flex items-center gap-8 relative z-10">
           <Link to="/" className="text-2xl font-extrabold tracking-tight text-brand">NETFLIX</Link>
           <nav className="hidden md:flex gap-6 text-sm text-neutral-300">
-            {items.map((it) => (
-              <NavLink key={it.label} to={it.to} active={it.to === '/' ? pathname === '/' : pathname.startsWith('/library')}>
-                {it.label}
-              </NavLink>
-            ))}
+            {items.map((it) => {
+              const base = it.to.split('?')[0];
+              const active = base === '/' ? pathname === '/' : pathname.startsWith(base);
+              return (
+                <NavLink key={it.label} to={it.to} active={active}>
+                  {it.label}
+                </NavLink>
+              );
+            })}
           </nav>
           <div className="ml-auto flex items-center gap-4 text-neutral-300">
             <IconSearch />

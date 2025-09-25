@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { tmdbTrending, tmdbImage, tmdbUpcoming, tmdbDetails, tmdbVideos, tmdbImages } from '@/services/tmdb';
-import { traktTrending, traktPopular, traktAnticipated, traktMostWatched } from '@/services/trakt';
+import { traktAnticipated, traktMostWatched } from '@/services/trakt';
 import { plexRecentlyAdded, plexImage, plexFindByGuid, plexPopular } from '@/services/plex';
 import { loadSettings } from '@/state/settings';
 import { cached } from '@/services/cache';
 import HomeHero from '@/components/HomeHero';
+import WatchlistButton from '@/components/WatchlistButton';
 import Row from '@/components/Row';
 
 type TabType = 'trending' | 'top10' | 'coming-soon' | 'worth-wait';
@@ -315,6 +316,14 @@ export default function NewPopular() {
           logoUrl={hero.logoUrl}
           onPlay={hero.id.startsWith('plex:') ? (() => navigate(`/player/${encodeURIComponent(hero.id)}`)) : undefined}
           onMoreInfo={() => navigate(`/details/${encodeURIComponent(hero.id)}`)}
+          extraActions={(
+            <WatchlistButton
+              itemId={hero.id}
+              itemType={hero.id.includes(':tv:') ? 'show' : 'movie'}
+              tmdbId={hero.id.startsWith('tmdb:') ? hero.id.split(':')[2] : undefined}
+              variant="button"
+            />
+          )}
         />
       )}
 

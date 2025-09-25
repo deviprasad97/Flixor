@@ -4,6 +4,7 @@ import { plexTvWatchlist, plexTvRemoveFromWatchlist } from '@/services/plextv';
 import { traktGetWatchlist, traktAddToWatchlist, traktRemoveFromWatchlist, isTraktAuthenticated, getTraktTokens } from '@/services/trakt';
 import { tmdbDetails, tmdbImage } from '@/services/tmdb';
 import { plexImage } from '@/services/plex';
+import WatchlistButton from '@/components/WatchlistButton';
 import { loadSettings } from '@/state/settings';
 
 type WatchlistItem = {
@@ -19,6 +20,7 @@ type WatchlistItem = {
   runtime?: number;
   genres?: string[];
   guid?: string;
+  tmdbId?: string;
 };
 
 type SortBy = 'dateAdded' | 'title' | 'year' | 'rating';
@@ -81,20 +83,29 @@ export default function MyList() {
       const data = await plexTvWatchlist(settings.plexTvToken || settings.plexAccountToken || '');
       const items = data.MediaContainer?.Metadata || [];
 
-      return items.map((item: any) => ({
-        id: item.ratingKey || `plex-${item.guid}`,
-        title: item.title,
-        year: item.year?.toString(),
-        image: item.thumb ? plexImage(plexBaseUrl, plexToken, item.thumb) : undefined,
-        overview: item.summary,
-        rating: item.contentRating || (item.rating ? `⭐ ${item.rating}` : undefined),
-        mediaType: item.type === 'movie' ? 'movie' : 'show',
-        source: 'plex' as const,
-        dateAdded: item.addedAt ? new Date(item.addedAt * 1000) : undefined,
-        runtime: item.duration ? Math.round(item.duration / 60000) : undefined,
-        genres: item.Genre?.map((g: any) => g.tag),
-        guid: item.guid
-      }));
+      return items.map((item: any) => {
+        let tmdbId: string | undefined;
+        try {
+          const g = String(item.guid || '');
+          const m = g.match(/(?:tmdb|themoviedb):\/\/(\d+)/i);
+          if (m) tmdbId = m[1];
+        } catch {}
+        return ({
+          id: item.ratingKey ? `plex:${item.ratingKey}` : (tmdbId ? `tmdb:${item.type==='movie'?'movie':'tv'}:${tmdbId}` : `plex-${item.guid}`),
+          title: item.title,
+          year: item.year?.toString(),
+          image: item.thumb ? plexImage(plexBaseUrl, plexToken, item.thumb) : undefined,
+          overview: item.summary,
+          rating: item.contentRating || (item.rating ? `⭐ ${item.rating}` : undefined),
+          mediaType: item.type === 'movie' ? 'movie' : 'show',
+          source: 'plex' as const,
+          dateAdded: item.addedAt ? new Date(item.addedAt * 1000) : undefined,
+          runtime: item.duration ? Math.round(item.duration / 60000) : undefined,
+          genres: item.Genre?.map((g: any) => g.tag),
+          guid: item.guid,
+          tmdbId,
+        });
+      });
     } catch (err) {
       console.error('Failed to load Plex watchlist:', err);
       return [];
@@ -126,8 +137,9 @@ export default function MyList() {
           } catch {}
         }
 
+        const tmdbId = movie.ids?.tmdb ? String(movie.ids.tmdb) : undefined;
         items.push({
-          id: `trakt-movie-${movie.ids?.tmdb || movie.ids?.imdb}`,
+          id: tmdbId ? `tmdb:movie:${tmdbId}` : (movie.ids?.imdb ? `tmdb:movie:${movie.ids.imdb}` : `trakt:movie:${movie.ids?.trakt}`),
           title: movie.title,
           year: movie.year?.toString(),
           image,
@@ -137,7 +149,8 @@ export default function MyList() {
           source: 'trakt' as const,
           dateAdded: entry.listed_at ? new Date(entry.listed_at) : undefined,
           runtime: movie.runtime,
-          genres: movie.genres
+          genres: movie.genres,
+          tmdbId
         });
       }
 
@@ -154,8 +167,9 @@ export default function MyList() {
           } catch {}
         }
 
+        const tmdbIdS = show.ids?.tmdb ? String(show.ids.tmdb) : undefined;
         items.push({
-          id: `trakt-show-${show.ids?.tmdb || show.ids?.imdb}`,
+          id: tmdbIdS ? `tmdb:tv:${tmdbIdS}` : (show.ids?.imdb ? `tmdb:tv:${show.ids.imdb}` : `trakt:show:${show.ids?.trakt}`),
           title: show.title,
           year: show.year?.toString(),
           image,
@@ -165,7 +179,8 @@ export default function MyList() {
           source: 'trakt' as const,
           dateAdded: entry.listed_at ? new Date(entry.listed_at) : undefined,
           runtime: show.runtime,
-          genres: show.genres
+          genres: show.genres,
+          tmdbId: tmdbIdS
         });
       }
 
@@ -195,7 +210,7 @@ export default function MyList() {
           const traktItem = {
             [item.mediaType === 'movie' ? 'movies' : 'shows']: [{
               ids: {
-                tmdb: itemId.includes('tmdb') ? parseInt(itemId.split('-').pop()!) : undefined
+                tmdb: item.tmdbId ? parseInt(item.tmdbId) : undefined
               }
             }]
           };
@@ -372,7 +387,7 @@ export default function MyList() {
                   bulkMode && selectedItems.has(item.id) ? 'ring-2 ring-white scale-95' : ''
                 }`}
               >
-                <div className="relative aspect-[2/3] bg-neutral-800 rounded-lg overflow-hidden">
+                <div className="relative aspect-[2/3] bg-neutral-800 rounded-lg overflow-hidden ring-1 ring-white/15 group-hover:ring-2 group-hover:ring-white/90 group-hover:ring-offset-2 group-hover:ring-offset-transparent transition-all">
                   {item.image ? (
                     <img
                       src={item.image}
@@ -390,12 +405,23 @@ export default function MyList() {
 
                   {/* Overlay */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="absolute bottom-0 left-0 right-0 p-3">
-                      <div className="text-xs text-white/60 mb-1">
-                        {item.year} • {item.mediaType === 'movie' ? 'Movie' : 'TV Show'}
+                    <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between">
+                      <div>
+                        <div className="text-xs text-white/60 mb-1">
+                          {item.year} • {item.mediaType === 'movie' ? 'Movie' : 'TV Show'}
+                        </div>
+                        {item.rating && (
+                          <div className="text-xs text-white/80">{item.rating}</div>
+                        )}
                       </div>
-                      {item.rating && (
-                        <div className="text-xs text-white/80">{item.rating}</div>
+                      {item.id.startsWith('plex:') && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); navigate(`/player/${encodeURIComponent(item.id)}`); }}
+                          className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:bg-neutral-200"
+                          title="Play"
+                        >
+                          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        </button>
                       )}
                     </div>
                   </div>
@@ -417,19 +443,11 @@ export default function MyList() {
                     </div>
                   )}
 
-                  {/* Remove button (when not in bulk mode) */}
+                  {/* Watchlist toggle (when not in bulk mode) */}
                   {!bulkMode && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeFromWatchlist(item.id);
-                      }}
-                      className="absolute top-2 right-2 w-8 h-8 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
-                    >
-                      <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                      </svg>
-                    </button>
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <WatchlistButton itemId={item.id} itemType={item.mediaType} tmdbId={item.tmdbId} variant="icon" />
+                    </div>
                   )}
 
                   {/* Source badge */}

@@ -63,8 +63,9 @@ html, body, #root { overflow-x: hidden; }
       linear-gradient(to bottom, #0a0a0a, #121212);
   }
   .card { @apply rounded-xl overflow-hidden ring-1 ring-white/5 bg-neutral-900/30; box-shadow: 0 16px 40px rgba(0,0,0,.55), 0 6px 18px rgba(0,0,0,.35); }
-  .card-hover { transition: transform 300ms ease, box-shadow 300ms ease; }
-  .card-hover:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 24px 60px rgba(0,0,0,.65), 0 8px 20px rgba(0,0,0,.45); }
+  .card-hover { transition: transform 250ms ease, box-shadow 250ms ease; }
+  /* Increase magnification on hover; keep shadow flat (no bottom weight) */
+  .card-hover:hover { transform: translateY(-2px) scale(1.06); box-shadow: 0 0 0 rgba(0,0,0,0); }
   .shadow-billboard { box-shadow: 0 24px 80px rgba(0,0,0,.65), 0 2px 0 rgba(255,255,255,.06) inset; }
   /* Row scroller: no inner padding so cards align to band; outer page-gutter handles outside spacing */
   .row-edge { padding-left: 0; padding-right: 0; -webkit-overflow-scrolling: touch; }

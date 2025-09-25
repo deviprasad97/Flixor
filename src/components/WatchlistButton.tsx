@@ -37,8 +37,9 @@ export default function WatchlistButton({
       // Check Plex watchlist
       const watchlist = await plexTvWatchlist();
       const items = watchlist.MediaContainer?.Metadata || [];
+      const normalizedId = String(itemId || '').startsWith('plex:') ? String(itemId).replace(/^plex:/,'') : String(itemId);
       const found = items.some((item: any) => {
-        if (item.ratingKey === itemId) return true;
+        if (String(item.ratingKey) === normalizedId) return true;
         if (tmdbId && item.guid?.includes(`tmdb://${tmdbId}`)) return true;
         if (imdbId && item.guid?.includes(`imdb://${imdbId}`)) return true;
         return false;

@@ -9,7 +9,7 @@ type PosterCardProps = {
 export default function PosterCard({ title, image, subtitle, badge, onClick }: PosterCardProps) {
   return (
     <button onClick={onClick} className="group w-40 flex-shrink-0 text-left">
-      <div className="relative rounded-md overflow-hidden aspect-[2/3] bg-neutral-800">
+      <div className="relative rounded-md overflow-hidden aspect-[2/3] bg-neutral-800 ring-1 ring-white/10 transition-[transform,ring] duration-300 group-hover:ring-white/60">
         {image ? (
           <img src={image} className="w-full h-full object-cover transition-transform group-hover:scale-[1.03]" alt={title} />
         ) : (
@@ -26,4 +26,3 @@ export default function PosterCard({ title, image, subtitle, badge, onClick }: P
     </button>
   );
 }
-

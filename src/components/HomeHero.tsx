@@ -14,6 +14,7 @@ type HomeHeroProps = {
   videoUrl?: string; // Plex Extras direct URL
   ytKey?: string; // YouTube trailer key fallback
   logoUrl?: string;
+  extraActions?: React.ReactNode;
 };
 
 export default function HomeHero({
@@ -29,7 +30,8 @@ export default function HomeHero({
   onMoreInfo,
   videoUrl,
   ytKey,
-  logoUrl
+  logoUrl,
+  extraActions
 }: HomeHeroProps) {
   const [muted, setMuted] = useState(true);
   const [playing, setPlaying] = useState(false);
@@ -186,6 +188,8 @@ export default function HomeHero({
                   More Info
                 </button>
               )}
+
+              {extraActions}
             </div>
           </div>
         </div>

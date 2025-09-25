@@ -13,7 +13,7 @@ export default function SkeletonRow({ count = 8, title }: { count?: number; titl
             </div>
           </div>
           <div className="row-edge no-scrollbar overflow-x-auto" style={{ padding: '12px 0 16px 0' }}>
-            <div className="flex gap-4 pb-4 w-max">
+            <div className="flex gap-8 pb-4 w-max">
               {Array.from({ length: count }).map((_, i) => (
                 <div key={i} className="group flex-shrink-0 w-[360px] md:w-[420px]">
                   <div className="relative aspect-[2/1] rounded-xl overflow-hidden bg-neutral-800 skeleton" />
