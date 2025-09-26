@@ -115,3 +115,27 @@ export async function refreshPlexServers(): Promise<Array<{ name: string; client
   }
   return out;
 }
+
+export async function getUserProfile(accountToken: string, clientId: string) {
+  // @ts-ignore
+  if (window.__TAURI__) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke('plex_tv_user', { accountToken, clientId });
+  }
+  const h = { ...hdrs(clientId), 'X-Plex-Token': accountToken } as any;
+  const res = await fetch(`${PLEX_TV}/api/v2/user`, { headers: h });
+  if (!res.ok) throw new Error('Failed to fetch user profile');
+  return res.json();
+}
+
+export async function getUsers(accountToken: string, clientId: string) {
+  // @ts-ignore
+  if (window.__TAURI__) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke('plex_tv_users', { accountToken, clientId });
+  }
+  const h = { ...hdrs(clientId), 'X-Plex-Token': accountToken } as any;
+  const res = await fetch(`${PLEX_TV}/api/v2/users`, { headers: h });
+  if (!res.ok) throw new Error('Failed to fetch users');
+  return res.json();
+}

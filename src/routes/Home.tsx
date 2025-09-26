@@ -9,7 +9,7 @@ import { traktTrending, isTraktAuthenticated } from '@/services/trakt';
 import { plexOnDeckGlobal, plexImage, plexLibs, plexSectionAll, plexMetadataWithExtras, plexPartUrl, plexLibrarySecondary, plexDir } from '@/services/plex';
 import BrowseModal from '@/components/BrowseModal';
 import { plexTvWatchlist } from '@/services/plextv';
-import { createPin, pollPin, getResources, buildAuthUrl, pickBestConnection } from '@/services/plextv_auth';
+import { createPin, pollPin, getResources, buildAuthUrl, pickBestConnection, getUserProfile } from '@/services/plextv_auth';
 import SectionBanner from '@/components/SectionBanner';
 import { TraktSection } from '@/components/TraktSection';
 
@@ -58,6 +58,27 @@ export default function Home() {
           }
           if (authed) {
             saveSettings({ plexAccountToken: authed });
+
+            // Fetch user profile
+            try {
+              const userProfile: any = await getUserProfile(authed, cid);
+              const profileData = {
+                id: userProfile.id,
+                username: userProfile.username || userProfile.title || 'User',
+                email: userProfile.email || '',
+                thumb: userProfile.thumb,
+                title: userProfile.title,
+                hasPassword: userProfile.hasPassword || false,
+                authToken: authed,
+                subscription: userProfile.subscription ? {
+                  active: userProfile.subscription.active || false,
+                  status: userProfile.subscription.status || 'free',
+                  plan: userProfile.subscription.plan
+                } : undefined
+              };
+              saveSettings({ plexUserProfile: profileData });
+            } catch {}
+
             const resources:any = await getResources(authed, cid);
             const servers = (resources || []).filter((r:any)=> r.product === 'Plex Media Server');
             if (servers.length) {

@@ -1,3 +1,28 @@
+export type PlexUserProfile = {
+  id: number;
+  username: string;
+  email: string;
+  thumb?: string;
+  title?: string;
+  hasPassword: boolean;
+  authToken?: string;
+  subscription?: {
+    active: boolean;
+    status: string;
+    plan?: string;
+  };
+};
+
+export type PlexUser = {
+  id: number;
+  username: string;
+  email?: string;
+  thumb?: string;
+  title?: string;
+  isHome?: boolean;
+  isRestricted?: boolean;
+};
+
 export type AppSettings = {
   plexBaseUrl?: string;
   plexToken?: string;
@@ -6,6 +31,9 @@ export type AppSettings = {
   plexClientId?: string;
   plexServer?: { name: string; clientIdentifier: string; baseUrl: string; token: string };
   plexServers?: Array<{ name: string; clientIdentifier: string; bestUri: string; token: string }>;
+  plexUserProfile?: PlexUserProfile;
+  plexUsers?: PlexUser[];
+  plexCurrentUserId?: number;
   tmdbBearer?: string;
   traktClientId?: string;
   traktTokens?: string; // JSON stringified TraktTokens

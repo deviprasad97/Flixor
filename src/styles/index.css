@@ -30,6 +30,10 @@ html, body, #root { overflow-x: hidden; }
   }
   @media (min-width: 768px) { :root { --page-gutter: var(--gutter-md); --row-gap: 28px; } }
   @media (min-width: 1280px) { :root { --page-gutter: var(--gutter-lg); --row-gap: 32px; } }
+
+  .top-20-m {
+    top: 20px;
+  }
   /* Fixed, global background layer (applied once in App) */
   .app-bg-fixed { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
   /* Grain overlay on the global background */

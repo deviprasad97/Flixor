@@ -187,6 +187,32 @@ export async function plexChildren(cfg: PlexConfig, ratingKey: string) {
   });
 }
 
+// Comprehensive search that searches by multiple GUIDs
+export async function plexComprehensiveGuidSearch(cfg: PlexConfig, guids: string[], typeNum?: 1|2) {
+  return cached(`plex:${encodeURIComponent(cfg.baseUrl)}:guidsearch:${guids.join(',')}:${typeNum ?? 0}`, 30 * 60 * 1000, async () => {
+    const allMatches: any[] = [];
+    const seenKeys = new Set<string>();
+
+    // Try each GUID
+    for (const guid of guids) {
+      try {
+        const result = await plexFindByGuid({ baseUrl: cfg.baseUrl, token: cfg.token }, guid, typeNum);
+        const items = result?.MediaContainer?.Metadata || [];
+
+        // Add unique items only
+        for (const item of items) {
+          if (!seenKeys.has(item.ratingKey)) {
+            seenKeys.add(item.ratingKey);
+            allMatches.push(item);
+          }
+        }
+      } catch {}
+    }
+
+    return { MediaContainer: { Metadata: allMatches } };
+  });
+}
+
 export async function plexFindByGuid(cfg: PlexConfig, guid: string, typeNum?: 1|2) {
   // @ts-ignore
   if (window.__TAURI__) {
@@ -194,11 +220,50 @@ export async function plexFindByGuid(cfg: PlexConfig, guid: string, typeNum?: 1|
     const { invoke } = await import('@tauri-apps/api/core');
     return cached(`plex:${encodeURIComponent(cfg.baseUrl)}:guid:${guid}:${typeNum ?? 0}`, 30 * 60 * 1000, async () => await invoke('plex_find_guid', { baseUrl: cfg.baseUrl, token: cfg.token, guid, type: typeNum ? String(typeNum) : undefined }));
   }
-  const url = `${cfg.baseUrl}/library/all?guid=${encodeURIComponent(guid)}${typeNum ? `&type=${typeNum}` : ''}&X-Plex-Token=${cfg.token}`;
+
+  // Try searching in all library sections if global search fails
   return cached(`plex:${encodeURIComponent(cfg.baseUrl)}:guid:${guid}:${typeNum ?? 0}`, 30 * 60 * 1000, async () => {
-    const res = await fetch(url, { headers: { Accept: 'application/json' } });
-    if (!res.ok) throw new Error(`Plex error ${res.status}`);
-    return res.json();
+    // First try global search
+    try {
+      const globalUrl = `${cfg.baseUrl}/library/all?guid=${encodeURIComponent(guid)}${typeNum ? `&type=${typeNum}` : ''}&X-Plex-Token=${cfg.token}`;
+      const res = await fetch(globalUrl, { headers: { Accept: 'application/json' } });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.MediaContainer?.Metadata?.length > 0) {
+          return data;
+        }
+      }
+    } catch {}
+
+    // If global search fails, search each library section
+    try {
+      const libsRes = await fetch(`${cfg.baseUrl}/library/sections?X-Plex-Token=${cfg.token}`, { headers: { Accept: 'application/json' } });
+      if (!libsRes.ok) throw new Error(`Failed to get library sections`);
+      const libs = await libsRes.json();
+      const sections = libs?.MediaContainer?.Directory || [];
+
+      // Filter sections by type if specified
+      const targetSections = typeNum
+        ? sections.filter((s: any) => (typeNum === 1 && s.type === 'movie') || (typeNum === 2 && s.type === 'show'))
+        : sections;
+
+      // Search each section
+      for (const section of targetSections) {
+        try {
+          const sectionUrl = `${cfg.baseUrl}/library/sections/${section.key}/all?guid=${encodeURIComponent(guid)}&X-Plex-Token=${cfg.token}`;
+          const sectionRes = await fetch(sectionUrl, { headers: { Accept: 'application/json' } });
+          if (sectionRes.ok) {
+            const sectionData = await sectionRes.json();
+            if (sectionData?.MediaContainer?.Metadata?.length > 0) {
+              return sectionData;
+            }
+          }
+        } catch {}
+      }
+    } catch {}
+
+    // Return empty result if nothing found
+    return { MediaContainer: { Metadata: [] } };
   });
 }
 

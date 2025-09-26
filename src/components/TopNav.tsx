@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { loadSettings, saveSettings } from '@/state/settings';
 import { forget } from '@/services/cache';
 import { refreshPlexServers } from '@/services/plextv_auth';
+import UserDropdown from '@/components/UserDropdown';
 
 const items = [
   { to: '/', label: 'Home' },
@@ -72,7 +73,7 @@ export default function TopNav() {
     saveSettings({ plexServers: list });
   }
   return (
-    <header className="fixed top-0 left-0 right-0 z-50">
+    <header className="fixed top-20-m left-0 right-0 z-50">
       <div ref={headerRef} className="relative h-16">
         <div className="nav-bg" />
         <div className="page-gutter h-16 flex items-center gap-8 relative z-10">
@@ -118,11 +119,7 @@ export default function TopNav() {
                 </div>
               )}
             </div>
-            <Link to="/settings" className="hidden md:inline-flex items-center gap-1 text-sm hover:text-white">
-              <IconCog />
-              <span>Settings</span>
-            </Link>
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-fuchsia-400 to-emerald-400" />
+            <UserDropdown />
           </div>
         </div>
       </div>

@@ -24,12 +24,22 @@
   border-radius: 4px;
 }
 
+.ui-video-seek-slider .thumb {
+  pointer-events: none;
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  left: -6px;
+  z-index: 4;
+  top: 1px;
+}
 .ui-video-seek-slider .thumb .handler {
   width: 16px;
   height: 16px;
   background: rgb(239, 68, 68);
   border: 2px solid white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  top: 1px;
 }
 
 .ui-video-seek-slider .thumb .handler:hover {

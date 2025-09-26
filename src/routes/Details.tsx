@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Badge from '@/components/Badge';
 import Row from '@/components/Row';
 import { loadSettings } from '@/state/settings';
-import { plexMetadata, plexImage, plexSearch, plexChildren, plexFindByGuid, plexMetadataWithExtras, plexPartUrl } from '@/services/plex';
+import { plexMetadata, plexImage, plexSearch, plexChildren, plexFindByGuid, plexComprehensiveGuidSearch, plexMetadataWithExtras, plexPartUrl } from '@/services/plex';
 import { tmdbDetails, tmdbImage, tmdbCredits, tmdbExternalIds, tmdbRecommendations, tmdbVideos, tmdbSearchTitle, tmdbTvSeasons, tmdbTvSeasonEpisodes, tmdbSimilar, tmdbImages } from '@/services/tmdb';
 import PersonModal from '@/components/PersonModal';
 import { useEffect, useState } from 'react';
@@ -277,46 +277,82 @@ export default function Details() {
             if (s.plexBaseUrl && s.plexToken) {
               const q = d.title || d.name;
               if (q) {
-                const guid = `tmdb://${tmdbId}`;
-                let hits: any[] = [];
+                let allHits: any[] = [];
+
+                // Build list of all possible GUIDs to search for
+                const searchGuids: string[] = [
+                  `tmdb://${tmdbId}`,
+                  `themoviedb://${tmdbId}`
+                ];
+
+                // Add external IDs if available
                 try {
-                  const byGuid: any = await plexFindByGuid({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, guid, media === 'movie' ? 1 : 2);
-                  hits = (byGuid?.MediaContainer?.Metadata || []) as any[];
+                  const ex: any = await tmdbExternalIds(s.tmdbBearer!, media as any, tmdbId);
+                  if (ex?.imdb_id) {
+                    searchGuids.push(`imdb://${ex.imdb_id}`);
+                  }
+                  if (ex?.tvdb_id && media === 'tv') {
+                    searchGuids.push(`tvdb://${ex.tvdb_id}`);
+                  }
                 } catch {}
-                if (hits.length === 0) {
-                  // Try themoviedb:// prefix used by some agents
+
+                // Use comprehensive search to find items by any of these GUIDs
+                try {
+                  const guidResults: any = await plexComprehensiveGuidSearch(
+                    { baseUrl: s.plexBaseUrl!, token: s.plexToken! },
+                    searchGuids,
+                    media === 'movie' ? 1 : 2
+                  );
+                  allHits = (guidResults?.MediaContainer?.Metadata || []) as any[];
+                } catch {}
+
+                // Method 3: Title search as last resort
+                if (allHits.length === 0) {
                   try {
-                    const byGuid2: any = await plexFindByGuid({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, `themoviedb://${tmdbId}`, media === 'movie' ? 1 : 2);
-                    hits = (byGuid2?.MediaContainer?.Metadata || []) as any[];
+                    const search: any = await plexSearch({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, q, (media === 'movie' ? 1 : 2));
+                    allHits = (search?.MediaContainer?.Metadata || []) as any[];
                   } catch {}
                 }
-                if (hits.length === 0) {
-                  // Try external ids (tvdb or imdb) from TMDB
-                  try {
-                    const ex: any = await tmdbExternalIds(s.tmdbBearer!, media as any, tmdbId);
-                    if (ex?.tvdb_id) {
-                      const byTvdb: any = await plexFindByGuid({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, `tvdb://${ex.tvdb_id}`, media === 'movie' ? 1 : 2);
-                      hits = (byTvdb?.MediaContainer?.Metadata || []) as any[];
-                    }
-                    if (hits.length === 0 && ex?.imdb_id) {
-                      const byImdb: any = await plexFindByGuid({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, `imdb://${ex.imdb_id}`, media === 'movie' ? 1 : 2);
-                      hits = (byImdb?.MediaContainer?.Metadata || []) as any[];
-                    }
-                  } catch {}
-                }
-                if (hits.length === 0) {
-                  const search: any = await plexSearch({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, q, (media === 'movie' ? 1 : 2));
-                  hits = (search?.MediaContainer?.Metadata || []) as any[];
-                }
-                // Robust match: prefer GUID match to tmdb id; else title+year normalized
+
+                // Deduplicate hits by ratingKey
+                const uniqueHits = Array.from(
+                  new Map(allHits.map(h => [h.ratingKey, h])).values()
+                );
+
+                // Find best match
                 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
                 const year = (d.release_date || d.first_air_date || '').slice(0,4);
                 let match: any | undefined = undefined;
-                for (const h of hits) {
+
+                console.log(`[TMDB->Plex] Searching for TMDB ID: ${tmdbId}, Title: "${q}", Year: ${year}`);
+                console.log(`[TMDB->Plex] Found ${uniqueHits.length} unique Plex items`);
+
+                // First priority: exact TMDB GUID match
+                for (const h of uniqueHits) {
                   const guids = (h.Guid || []).map((g: any) => String(g.id||''));
-                  if (guids.some(g => g.includes(`tmdb://${tmdbId}`))) { match = h; break; }
-                  if (guids.some(g => g.includes(`themoviedb://${tmdbId}`))) { match = h; break; }
-                  if (norm(h.title||h.grandparentTitle||'') === norm(q) && (!year || String(h.year||'') === year)) { match = h; }
+                  console.log(`[TMDB->Plex] Checking item "${h.title}" (${h.ratingKey}), GUIDs:`, guids);
+                  if (guids.some(g => g === `tmdb://${tmdbId}` || g === `themoviedb://${tmdbId}`)) {
+                    console.log(`[TMDB->Plex] ✓ Found exact TMDB match!`);
+                    match = h;
+                    break;
+                  }
+                }
+
+                // Second priority: title and year match
+                if (!match) {
+                  for (const h of uniqueHits) {
+                    const titleMatch = norm(h.title||h.grandparentTitle||'') === norm(q);
+                    const yearMatch = !year || String(h.year||'') === year;
+                    if (titleMatch && yearMatch) {
+                      console.log(`[TMDB->Plex] ✓ Found title/year match: "${h.title}" (${h.year})`);
+                      match = h;
+                      break;
+                    }
+                  }
+                }
+
+                if (!match) {
+                  console.log(`[TMDB->Plex] ✗ No match found for TMDB ID ${tmdbId}`);
                 }
                 if (match) {
                   // Replace backdrop with plex art for authenticity and add badges
