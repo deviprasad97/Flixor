@@ -37,6 +37,7 @@ export default function Details() {
   const [seasons, setSeasons] = useState<Array<{key:string; title:string}>>([]);
   const [seasonKey, setSeasonKey] = useState<string>('');
   const [episodes, setEpisodes] = useState<any[]>([]);
+  const [episodesLoading, setEpisodesLoading] = useState<boolean>(false);
   const [tech, setTech] = useState<any>({});
   const [versions, setVersions] = useState<Array<{id:string; label:string}>>([]);
   const [activeVersion, setActiveVersion] = useState<string | undefined>(undefined);
@@ -431,6 +432,7 @@ export default function Details() {
     async function loadEps() {
       if (!seasonKey) return;
       try {
+        setEpisodesLoading(true);
         // Prefer Plex episodes if plex seasonKey is numeric (ratingKey), otherwise use TMDB fallback
         if (/^\d+$/.test(seasonKey) && s.plexBaseUrl && s.plexToken) {
           const ch: any = await plexChildren({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, seasonKey);
@@ -456,7 +458,8 @@ export default function Details() {
           }));
           setEpisodes(eps);
         }
-      } catch (e) { console.error(e); }
+      } catch (e) { console.error(e); setEpisodes([]); }
+      finally { setEpisodesLoading(false); }
     }
     loadEps();
   }, [seasonKey]);
@@ -544,7 +547,7 @@ export default function Details() {
         onTabChange={setActiveTab}
       />
       {/* Content Section Below Hero */}
-      <div className="px-4 md:px-8 lg:px-12 xl:px-16 py-8">
+      <div className="page-gutter-left py-8">
         {/* Season Selector */}
         {activeTab === 'EPISODES' && seasons.length > 0 && (
           <div className="mb-6">
@@ -565,7 +568,9 @@ export default function Details() {
         {/* Tab Content */}
         {activeTab === 'EPISODES' && seasons.length > 0 && (
           <section className="space-y-4">
-            {episodes.length ? (
+            {episodesLoading ? (
+              <EpisodeSkeletonList />
+            ) : episodes.length ? (
               episodes.map((e: any, idx: number) => (
                 <EpisodeItem
                   key={e.id || idx}
@@ -574,7 +579,7 @@ export default function Details() {
                 />
               ))
             ) : (
-              <EpisodeSkeletonList />
+              <div className="text-white/60 text-center py-10">{badges.includes('No local source') ? 'No source found' : 'No episodes found'}</div>
             )}
           </section>
         )}
@@ -587,6 +592,7 @@ export default function Details() {
                   title="Recommendations"
                   items={related as any}
                   browseKey={tmdbCtx?.id ? `tmdb:recs:${tmdbCtx.media}:${tmdbCtx.id}` : undefined}
+                  gutter="edge"
                   onItemClick={(id) => nav(`/details/${encodeURIComponent(id)}`)}
                 />
                 {similar.length > 0 && (
@@ -594,6 +600,7 @@ export default function Details() {
                     title="More Like This"
                     items={similar as any}
                     browseKey={tmdbCtx?.id ? `tmdb:similar:${tmdbCtx.media}:${tmdbCtx.id}` : undefined}
+                    gutter="edge"
                     onItemClick={(id) => nav(`/details/${encodeURIComponent(id)}`)}
                   />
                 )}
