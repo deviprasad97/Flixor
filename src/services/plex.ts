@@ -157,6 +157,22 @@ export function plexPartUrl(baseUrl: string, token: string, partKey: string) {
   return `${base}${key}${sep}X-Plex-Token=${token}`;
 }
 
+export async function plexCollections(cfg: PlexConfig, libraryKey: string) {
+  // @ts-ignore
+  if (window.__TAURI__) {
+    // @ts-ignore
+    const { invoke } = await import('@tauri-apps/api/core');
+    return cached(`plex:${encodeURIComponent(cfg.baseUrl)}:collections:${libraryKey}`, 30 * 60 * 1000, async () =>
+      await invoke('plex_collections', { baseUrl: cfg.baseUrl, token: cfg.token, libraryKey }));
+  }
+  const url = `${cfg.baseUrl}/library/sections/${libraryKey}/collections?X-Plex-Token=${cfg.token}`;
+  return cached(`plex:${encodeURIComponent(cfg.baseUrl)}:collections:${libraryKey}`, 30 * 60 * 1000, async () => {
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(`Plex error ${res.status}`);
+    return res.json();
+  });
+}
+
 export async function plexSearch(cfg: PlexConfig, query: string, typeNum: 1|2 = 1) {
   // @ts-ignore
   if (window.__TAURI__) {

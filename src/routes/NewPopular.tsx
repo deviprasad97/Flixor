@@ -327,7 +327,7 @@ export default function NewPopular() {
         />
       )}
 
-      <div className="px-4 md:px-8 lg:px-12 xl:px-16 mt-8">
+      <div className="page-gutter-left mt-8">
         {/* API Key Warning */}
         {!tmdbKey && (
           <div className="mb-6 p-4 bg-yellow-900/20 border border-yellow-600/30 rounded-lg">
@@ -420,7 +420,7 @@ export default function NewPopular() {
                   <Row
                     title="New on Plex"
                     items={recentlyAdded}
-                    gutter="inherit"
+                    gutter="edge"
                     onItemClick={handleItemClick}
                   />
                 )}
@@ -428,7 +428,7 @@ export default function NewPopular() {
                   <Row
                     title="Popular on Plex"
                     items={popularPlex}
-                    gutter="inherit"
+                    gutter="edge"
                     onItemClick={handleItemClick}
                   />
                 )}
@@ -436,7 +436,7 @@ export default function NewPopular() {
                   <Row
                     title="Trending Movies"
                     items={trendingMovies}
-                    gutter="inherit"
+                    gutter="edge"
                     onItemClick={handleItemClick}
                   />
                 )}
@@ -444,7 +444,7 @@ export default function NewPopular() {
                   <Row
                     title="Trending TV Shows"
                     items={trendingShows}
-                    gutter="inherit"
+                    gutter="edge"
                     onItemClick={handleItemClick}
                   />
                 )}
@@ -496,7 +496,7 @@ export default function NewPopular() {
               <Row
                 title="Coming Soon"
                 items={upcoming}
-                gutter="inherit"
+                gutter="edge"
                 onItemClick={handleItemClick}
               />
             )}
@@ -505,7 +505,7 @@ export default function NewPopular() {
               <Row
                 title="Most Anticipated"
                 items={anticipated}
-                gutter="inherit"
+                gutter="edge"
                 onItemClick={handleItemClick}
               />
             )}

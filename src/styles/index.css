@@ -104,6 +104,8 @@ html, body, #root { overflow-x: hidden; }
   .shadow-billboard { box-shadow: 0 24px 80px rgba(0,0,0,.65), 0 2px 0 rgba(255,255,255,.06) inset; }
   /* Page gutters for general layout */
   .page-gutter { padding-left: var(--page-gutter); padding-right: var(--page-gutter); }
+  /* Left-only page gutter for row-first pages (Search, New & Popular) */
+  .page-gutter-left { padding-left: var(--page-gutter); padding-right: 0; }
   /* Row-specific gutters: left padding only, content flows to right edge */
   .row-gutter { padding-left: var(--page-gutter); padding-right: 0; }
   /* Row scroller: extend to full width but keep left start aligned */
@@ -111,7 +113,7 @@ html, body, #root { overflow-x: hidden; }
     -webkit-overflow-scrolling: touch;
     margin-left: calc(var(--page-gutter) * -1);
     padding-left: var(--page-gutter);
-    padding-right: 0;
+    padding-right: var(--page-gutter);
   }
   /* Plain row edge: no negative margin; use outer container gutters */
   .row-edge-plain {

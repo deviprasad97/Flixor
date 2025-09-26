@@ -90,7 +90,9 @@ export default function TopNav() {
             })}
           </nav>
           <div className="ml-auto flex items-center gap-4 text-neutral-300">
-            <IconSearch />
+            <Link to="/search" className="hover:text-white transition-colors">
+              <IconSearch />
+            </Link>
             <span className="hidden md:block text-xs">Kids</span>
             <IconBell />
             {/* Server switcher */}

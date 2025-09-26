@@ -146,6 +146,26 @@ export async function tmdbVideos(key: string, media: 'movie'|'tv', id: string | 
   });
 }
 
+export async function tmdbSearchMulti(key: string, query: string) {
+  const token = normalizeBearer(key);
+  return cached(`tmdb:searchMulti:${query}`, 6 * 60 * 60 * 1000, async () => {
+    const url = `${TMDB}/search/multi?query=${encodeURIComponent(query)}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
+    return res.json();
+  });
+}
+
+export async function tmdbPopular(key: string, media: 'movie'|'tv' = 'movie') {
+  const token = normalizeBearer(key);
+  return cached(`tmdb:popular:${media}`, 6 * 60 * 60 * 1000, async () => {
+    const url = `${TMDB}/${media}/popular`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
+    return res.json();
+  });
+}
+
 export async function tmdbImages(key: string, media: 'movie'|'tv', id: string | number, includeImageLanguage = 'en,null') {
   const token = normalizeBearer(key);
   return cached(`tmdb:images:${media}:${id}:${includeImageLanguage}`, 24 * 60 * 60 * 1000, async () => {

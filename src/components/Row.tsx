@@ -11,7 +11,7 @@ export default function Row({ title, items, variant = 'default', onItemClick, br
   variant?: 'default' | 'continue';
   onItemClick?: (id: string) => void;
   browseKey?: string;
-  gutter?: 'row' | 'inherit'; // 'row' = left-only with edge-to-edge; 'inherit' = rely on parent gutters both sides
+  gutter?: 'row' | 'inherit' | 'edge'; // 'row' = left-only wrapper + edge scroller; 'inherit' = plain; 'edge' = edge scroller only (no wrapper padding)
 }) {
   const [params, setParams] = useSearchParams();
   // Deduplicate by stable item id to avoid React key collisions
@@ -46,7 +46,7 @@ export default function Row({ title, items, variant = 'default', onItemClick, br
               )}
             </div>
           </div>
-          <div className={(gutter === 'row' ? 'row-edge' : 'row-edge-plain') + ' no-scrollbar overflow-x-auto py-3 md:py-4'}>
+          <div className={((gutter === 'row' || gutter === 'edge') ? 'row-edge' : 'row-edge-plain') + ' no-scrollbar overflow-x-auto py-3 md:py-4'}>
             <div className="flex gap-6 md:gap-8 pb-2 md:pb-4 w-max">
               
               {uniqueItems.map((i) => variant === 'continue' ? (

@@ -5,9 +5,9 @@ import { plexMetadata, plexFindByGuid } from '@/services/plex';
 import { cached } from '@/services/cache';
 import WatchlistButton from '@/components/WatchlistButton';
 
-type CardProps = { id: string; title: string; image: string; badge?: string; onClick?: (id: string) => void };
+type CardProps = { id: string; title: string; image: string; badge?: string; onClick?: (id: string) => void; layout?: 'row' | 'grid' };
 
-export default function LandscapeCard({ id, title, image, badge, onClick }: CardProps) {
+export default function LandscapeCard({ id, title, image, badge, onClick, layout = 'row' }: CardProps) {
   const [altImg, setAltImg] = useState<string | undefined>(undefined);
   const [mappedPlexId, setMappedPlexId] = useState<string | undefined>(undefined);
   const [availabilityChecked, setAvailabilityChecked] = useState(false);
@@ -77,9 +77,11 @@ export default function LandscapeCard({ id, title, image, badge, onClick }: Card
     })();
   }, [id]);
   const src = altImg || image;
+  const wrapperClass = layout === 'grid' ? 'group relative z-0 w-full cursor-pointer' : 'group relative z-0 flex-shrink-0 w-[360px] md:w-[420px] cursor-pointer';
+  const aspectClass = layout === 'grid' ? 'aspect-video' : 'aspect-[2/1]';
   return (
-    <div className="group relative z-0 flex-shrink-0 w-[360px] md:w-[420px] cursor-pointer" onClick={() => onClick?.(id)}>
-      <div className="relative aspect-[2/1] card card-hover ring-1 ring-white/15 hover:ring-2 hover:ring-white/90 hover:ring-offset-2 hover:ring-offset-transparent transition-all duration-200 group-hover:z-20">
+    <div className={wrapperClass} onClick={() => onClick?.(id)}>
+      <div className={`relative ${aspectClass} card card-hover ring-1 ring-white/15 hover:ring-2 hover:ring-white/90 hover:ring-offset-2 hover:ring-offset-transparent transition-all duration-200 group-hover:z-20`}>
         <img src={src} alt={title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
         {/* Top-left badge */}
         {badge && <span className="absolute top-2 left-2 text-xs bg-black/70 text-white px-2 py-0.5 rounded">{badge}</span>}
