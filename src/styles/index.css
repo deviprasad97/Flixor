@@ -19,8 +19,37 @@ html, body, #root { overflow-x: hidden; }
 
 /* Utilities for Netflix-style UI */
 @layer components {
+  /* Spacing tokens */
+  :root {
+    --gutter-xs: 16px;
+    --gutter-sm: 24px;
+    --gutter-md: 32px;
+    --gutter-lg: 48px;
+    --row-gap: 24px;
+    --page-gutter: var(--gutter-sm);
+  }
+  @media (min-width: 768px) { :root { --page-gutter: var(--gutter-md); --row-gap: 28px; } }
+  @media (min-width: 1280px) { :root { --page-gutter: var(--gutter-lg); --row-gap: 32px; } }
   /* Fixed, global background layer (applied once in App) */
   .app-bg-fixed { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+  /* Grain overlay on the global background */
+  .app-bg-fixed::after {
+    content: '';
+    position: absolute; inset: 0;
+    pointer-events: none;
+    opacity: 0.06; /* subtle */
+    mix-blend-mode: soft-light;
+    background-size: 240px 240px;
+    background-repeat: repeat;
+    background-image: url("data:image/svg+xml;utf8,\
+      <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>\
+        <filter id='n'>\
+          <feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/>\
+          <feColorMatrix type='saturate' values='0'/>\
+        </filter>\
+        <rect width='100%' height='100%' filter='url(%23n)' opacity='1'/>\
+      </svg>");
+  }
   /* Top navigation background that fades with scroll */
   .nav-bg {
     position: absolute; inset: 0; pointer-events: none; z-index: 0;
@@ -47,31 +76,46 @@ html, body, #root { overflow-x: hidden; }
       linear-gradient(180deg, rgba(110, 60, 40, .22) 0%, rgba(40, 20, 16, .18) 40%, rgba(20,20,20,.0) 100%),
       linear-gradient(to bottom, #0b0b0b, #141414);
   }
-  /* Home screen cinematic gradient: dark base with red glow bottom-left
-     and teal glow top-right, plus a soft vignette. */
+  /* Home screen cinematic gradient tuned to reference: deep red bottom-left,
+     muted teal top-right, and a soft vignette over a near-black base. */
   .bg-home-gradient {
     background:
-      /* subtle top center highlight */
-      radial-gradient(1200px 60% at 50% -10%, rgba(255,255,255,0.06), transparent 70%),
-      /* teal glow top-right */
-      radial-gradient(80% 70% at 82% 8%, rgba(16, 94, 107, 0.45), rgba(16, 94, 107, 0.28) 35%, transparent 70%),
-      /* red glow bottom-left */
-      radial-gradient(70% 65% at 12% 88%, rgba(128, 22, 18, 0.55), rgba(128, 22, 18, 0.32) 40%, transparent 72%),
-      /* soft vignette around the edges */
-      radial-gradient(140% 120% at 50% 40%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.35) 100%),
+      /* muted teal glow (top-right, primary) */
+      radial-gradient(120% 95% at 84% 6%, rgba(20, 76, 84, 0.42), rgba(20, 76, 84, 0.20) 42%, transparent 75%),
+      /* deep red glow (bottom-left, primary) */
+      radial-gradient(115% 90% at 10% 92%, rgba(122, 22, 18, 0.44), rgba(122, 22, 18, 0.20) 45%, transparent 74%),
+      /* subtle red echo (top-left) */
+      radial-gradient(110% 85% at 8% 8%, rgba(122, 22, 18, 0.12), rgba(122, 22, 18, 0.06) 40%, transparent 70%),
+      /* subtle teal echo (bottom-right) */
+      radial-gradient(110% 85% at 92% 92%, rgba(20, 76, 84, 0.12), rgba(20, 76, 84, 0.06) 40%, transparent 70%),
+      /* soft edge vignette with minimal additional black */
+      radial-gradient(150% 130% at 50% 45%, rgba(0,0,0,0.0) 60%, rgba(0,0,0,0.22) 100%),
       /* base */
-      linear-gradient(to bottom, #0a0a0a, #121212);
+      linear-gradient(180deg, #0a0a0a 0%, #0f0f10 50%, #0b0c0d 100%);
   }
   .card { @apply rounded-xl overflow-hidden ring-1 ring-white/5 bg-neutral-900/30; box-shadow: 0 16px 40px rgba(0,0,0,.55), 0 6px 18px rgba(0,0,0,.35); }
   .card-hover { transition: transform 250ms ease, box-shadow 250ms ease; }
   /* Increase magnification on hover; keep shadow flat (no bottom weight) */
   .card-hover:hover { transform: translateY(-2px) scale(1.06); box-shadow: 0 0 0 rgba(0,0,0,0); }
   .shadow-billboard { box-shadow: 0 24px 80px rgba(0,0,0,.65), 0 2px 0 rgba(255,255,255,.06) inset; }
-  /* Row scroller: no inner padding so cards align to band; outer page-gutter handles outside spacing */
-  .row-edge { padding-left: 0; padding-right: 0; -webkit-overflow-scrolling: touch; }
-  @media (min-width: 768px) { .row-edge{ padding-left:0; padding-right:0; } }
-  .page-gutter { padding-left: 24px; padding-right: 24px; }
-  @media (min-width: 768px) { .page-gutter { padding-left: 14px; padding-right: 14px; } }
+  /* Page gutters for general layout */
+  .page-gutter { padding-left: var(--page-gutter); padding-right: var(--page-gutter); }
+  /* Row-specific gutters: left padding only, content flows to right edge */
+  .row-gutter { padding-left: var(--page-gutter); padding-right: 0; }
+  /* Row scroller: extend to full width but keep left start aligned */
+  .row-edge {
+    -webkit-overflow-scrolling: touch;
+    margin-left: calc(var(--page-gutter) * -1);
+    padding-left: var(--page-gutter);
+    padding-right: 0;
+  }
+  /* Plain row edge: no negative margin; use outer container gutters */
+  .row-edge-plain {
+    -webkit-overflow-scrolling: touch;
+    margin-left: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
   /* Viewport bleed that does not create horizontal scroll */
   .bleed { width: 100vw; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); }
   /* Row band used to render a boxed background per row.

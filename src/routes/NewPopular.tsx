@@ -420,6 +420,7 @@ export default function NewPopular() {
                   <Row
                     title="New on Plex"
                     items={recentlyAdded}
+                    gutter="inherit"
                     onItemClick={handleItemClick}
                   />
                 )}
@@ -427,6 +428,7 @@ export default function NewPopular() {
                   <Row
                     title="Popular on Plex"
                     items={popularPlex}
+                    gutter="inherit"
                     onItemClick={handleItemClick}
                   />
                 )}
@@ -434,6 +436,7 @@ export default function NewPopular() {
                   <Row
                     title="Trending Movies"
                     items={trendingMovies}
+                    gutter="inherit"
                     onItemClick={handleItemClick}
                   />
                 )}
@@ -441,6 +444,7 @@ export default function NewPopular() {
                   <Row
                     title="Trending TV Shows"
                     items={trendingShows}
+                    gutter="inherit"
                     onItemClick={handleItemClick}
                   />
                 )}
@@ -492,6 +496,7 @@ export default function NewPopular() {
               <Row
                 title="Coming Soon"
                 items={upcoming}
+                gutter="inherit"
                 onItemClick={handleItemClick}
               />
             )}
@@ -500,6 +505,7 @@ export default function NewPopular() {
               <Row
                 title="Most Anticipated"
                 items={anticipated}
+                gutter="inherit"
                 onItemClick={handleItemClick}
               />
             )}

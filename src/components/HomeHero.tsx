@@ -65,8 +65,16 @@ export default function HomeHero({
   if (rating) metaBadges.push(rating);
 
   return (
-    <div className="bleed" style={{ padding: '20px' }}>
-      <div className="rounded-2xl overflow-hidden shadow-billboard ring-1 ring-white/10 bg-neutral-900/40 relative h-[56vh] md:h-[64vh] xl:h-[68vh]">
+    <div
+      className="bleed"
+      style={{
+        paddingTop: '16px',
+        paddingBottom: '16px',
+        paddingLeft: 'var(--page-gutter)',
+        paddingRight: 'var(--page-gutter)'
+      }}
+    >
+      <div className="rounded-2xl overflow-hidden shadow-billboard ring-1 ring-white/10 bg-neutral-900/40 relative h-[42vh] md:h-[50vh] xl:h-[54vh]">
         {/* Background Image/Video Layer */}
         <div className="absolute inset-0">
           {/* Backdrop image */}
@@ -116,7 +124,7 @@ export default function HomeHero({
         </div>
 
         {/* Content Layer */}
-        <div className="absolute inset-0 flex flex-col justify-end p-6 md:p-10">
+        <div className="absolute inset-0 flex flex-col justify-end p-5 md:p-8">
           <div className="max-w-4xl">
             {/* Title/Logo */}
             <div className="mb-4">
@@ -124,12 +132,12 @@ export default function HomeHero({
                 <img
                   src={logoUrl}
                   alt={title}
-                  className="h-16 md:h-24 lg:h-32 max-w-[80vw] md:max-w-[50vw] object-contain drop-shadow-2xl"
+                  className="h-12 md:h-20 lg:h-24 max-w-[80vw] md:max-w-[50vw] object-contain drop-shadow-2xl"
                   style={{ filter: 'drop-shadow(0 10px 30px rgba(0,0,0,0.9))' }}
                 />
               ) : (
                 <h1
-                  className="text-4xl md:text-6xl lg:text-7xl font-black tracking-tight text-white"
+                  className="text-3xl md:text-5xl lg:text-6xl font-black tracking-tight text-white"
                   style={{ textShadow: '0 4px 20px rgba(0,0,0,0.9)' }}
                 >
                   {title}

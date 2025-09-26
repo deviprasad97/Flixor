@@ -5,12 +5,13 @@ import { useMemo } from 'react';
 
 type Item = { id: string; title: string; image: string; badge?: string; progress?: number };
 
-export default function Row({ title, items, variant = 'default', onItemClick, browseKey }: {
+export default function Row({ title, items, variant = 'default', onItemClick, browseKey, gutter = 'row' }: {
   title: string;
   items: Item[];
   variant?: 'default' | 'continue';
   onItemClick?: (id: string) => void;
   browseKey?: string;
+  gutter?: 'row' | 'inherit'; // 'row' = left-only with edge-to-edge; 'inherit' = rely on parent gutters both sides
 }) {
   const [params, setParams] = useSearchParams();
   // Deduplicate by stable item id to avoid React key collisions
@@ -27,8 +28,8 @@ export default function Row({ title, items, variant = 'default', onItemClick, br
     return out;
   }, [items]);
   return (
-    <section className="py-2 my-5">
-      <div className="page-gutter">
+    <section className="py-0 my-6 md:my-8 lg:my-10">
+      <div className={gutter === 'row' ? 'row-gutter' : ''}>
         <div className="row-band">
           <div className="pt-4">
             <div className="flex items-baseline gap-3 group">
@@ -45,15 +46,14 @@ export default function Row({ title, items, variant = 'default', onItemClick, br
               )}
             </div>
           </div>
-          <div className="row-edge no-scrollbar overflow-x-auto" style={{ padding: '12px 0 16px 0' }}>
-            <div className="flex gap-8 pb-4 w-max">
+          <div className={(gutter === 'row' ? 'row-edge' : 'row-edge-plain') + ' no-scrollbar overflow-x-auto py-3 md:py-4'}>
+            <div className="flex gap-6 md:gap-8 pb-2 md:pb-4 w-max">
               
               {uniqueItems.map((i) => variant === 'continue' ? (
                 <ContinueCard key={i.id} id={i.id} title={i.title} image={i.image!} progress={i.progress ?? 0} onClick={(id) => onItemClick?.(id)} />
               ) : (
                 <LandscapeCard key={i.id} id={i.id} title={i.title} image={i.image!} badge={i.badge} onClick={() => onItemClick?.(i.id)} />
               ))}
-              
             </div>
           </div>
         </div>
