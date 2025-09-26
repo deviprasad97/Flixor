@@ -1180,6 +1180,9 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
                   <option value="2">2x</option>
                 </select>
 
+                {/* Picture-in-Picture */}
+                <PiPButton videoRef={videoRef} />
+
                 {/* Fullscreen */}
                 <button
                   className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
@@ -1195,5 +1198,25 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
         </div>
       </div>
     </div>
+  );
+}
+
+// Lightweight PiP button that prefers Document PiP and falls back to element PiP
+import { usePictureInPicture } from '@/hooks/usePictureInPicture';
+function PiPButton({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement> }) {
+  const { supported, active, toggle } = usePictureInPicture(videoRef);
+  if (!supported) return null;
+  return (
+    <button
+      className={`p-2 rounded-full ${active ? 'bg-white/20' : 'bg-white/10 hover:bg-white/20'} transition-colors`}
+      onClick={() => toggle()}
+      title="Picture in Picture"
+    >
+      {/* Simple PiP glyph */}
+      <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M3 5a2 2 0 012-2h14a2 2 0 012 2v6h-2V5H5v14h6v2H5a2 2 0 01-2-2V5z"/>
+        <rect x="13" y="13" width="8" height="6" rx="1"/>
+      </svg>
+    </button>
   );
 }

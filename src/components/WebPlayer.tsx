@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { usePictureInPicture } from '@/hooks/usePictureInPicture';
 
 export default function WebPlayer({
   src,
@@ -46,6 +47,7 @@ export default function WebPlayer({
   const [rate, setRate] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const dashRef = useRef<any>(null);
+  const { supported: pipSupported, active: pipActive, toggle: togglePiP } = usePictureInPicture(videoRef);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -279,6 +281,11 @@ export default function WebPlayer({
             </div>
           )}
           <div className="ml-auto tabular-nums text-neutral-300">{fmt(time)} / {fmt(duration)}</div>
+          {pipSupported && (
+            <button className="px-2 py-1 rounded bg-white/10 hover:bg-white/20" onClick={()=> togglePiP()} title="Picture in Picture">
+              {pipActive ? 'PiP On' : 'PiP'}
+            </button>
+          )}
           <button className="px-2 py-1 rounded bg-white/10 hover:bg-white/20" onClick={toggleFullscreen}>Full</button>
         </div>
         </div>
