@@ -129,6 +129,15 @@ html, body, #root { overflow-x: hidden; }
   .row-band { position: relative; border-radius: 22px; overflow: visible; border: 0; background: transparent; box-shadow: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
+  /* Range sliders (modern) */
+  input.range-h, input.range-v { -webkit-appearance: none; appearance: none; background: transparent; outline: none; }
+  input.range-h::-webkit-slider-runnable-track { height: 6px; background: transparent; border-radius: 9999px; }
+  input.range-h::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 9999px; background: #fff; border: none; box-shadow: 0 2px 6px rgba(0,0,0,.4); margin-top: -4px; transition: transform .15s ease, box-shadow .15s ease; }
+  input.range-h:active::-webkit-slider-thumb { transform: scale(1.1); box-shadow: 0 4px 10px rgba(0,0,0,.5); }
+  input.range-v { -webkit-appearance: slider-vertical; height: 100%; }
+  input.range-v::-webkit-slider-runnable-track { width: 6px; background: transparent; border-radius: 9999px; }
+  input.range-v::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 9999px; background: #fff; border: none; box-shadow: 0 2px 6px rgba(0,0,0,.4); transition: transform .15s ease, box-shadow .15s ease; }
+  input.range-v:active::-webkit-slider-thumb { transform: scale(1.1); box-shadow: 0 4px 10px rgba(0,0,0,.5); }
 }
 
 /* Details hero layout */

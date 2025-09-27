@@ -36,6 +36,7 @@ interface DetailsHeroProps {
 
   // Actions
   onAddToList?: () => void;
+  watchlistProps?: { itemId: string; itemType: 'movie'|'show'; tmdbId?: string|number; imdbId?: string };
   onMarkWatched?: () => void;
   onPersonClick?: (person: { id?: string; name: string }) => void;
 
@@ -71,6 +72,7 @@ export default function DetailsHero({
   onPlay,
   onAddToList,
   onMarkWatched,
+  watchlistProps,
   onPersonClick,
   trailerUrl,
   trailerKey,
@@ -288,15 +290,25 @@ export default function DetailsHero({
               Play
             </button>
 
-            <button
-              onClick={onAddToList}
-              className="inline-flex items-center px-5 py-3 text-base font-medium text-white bg-white/20 backdrop-blur-sm rounded-lg hover:bg-white/30 transition-all"
-            >
-              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-              </svg>
-              My List
-            </button>
+            {watchlistProps ? (
+              <WatchlistButton
+                itemId={watchlistProps.itemId}
+                itemType={watchlistProps.itemType}
+                tmdbId={watchlistProps.tmdbId}
+                imdbId={watchlistProps.imdbId}
+                variant="button"
+              />
+            ) : (
+              <button
+                onClick={onAddToList}
+                className="inline-flex items-center px-5 py-3 text-base font-medium text-white bg-white/20 backdrop-blur-sm rounded-lg hover:bg-white/30 transition-all"
+              >
+                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                </svg>
+                My List
+              </button>
+            )}
 
             {hasMediaInfo && (
               <button
@@ -438,3 +450,4 @@ export default function DetailsHero({
     </div>
   );
 }
+import WatchlistButton from '@/components/WatchlistButton';

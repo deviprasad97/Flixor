@@ -98,7 +98,7 @@ export default function LandscapeCard({ id, title, image, badge, onClick, layout
               itemId={id}
               itemType={kind}
               tmdbId={tmdbId}
-              variant="icon"
+              variant="button"
               className="pointer-events-auto"
             />
           </div>

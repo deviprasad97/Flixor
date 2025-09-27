@@ -322,7 +322,7 @@ export default function NewPopular() {
               itemType={hero.id.includes(':tv:') ? 'show' : 'movie'}
               tmdbId={hero.id.startsWith('tmdb:') ? hero.id.split(':')[2] : undefined}
               variant="button"
-            />
+              />
           )}
         />
       )}

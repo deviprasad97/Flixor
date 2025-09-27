@@ -4,6 +4,8 @@ import Row from '@/components/Row';
 import { loadSettings } from '@/state/settings';
 import { plexMetadata, plexImage, plexSearch, plexChildren, plexFindByGuid, plexComprehensiveGuidSearch, plexMetadataWithExtras, plexPartUrl } from '@/services/plex';
 import { tmdbDetails, tmdbImage, tmdbCredits, tmdbExternalIds, tmdbRecommendations, tmdbVideos, tmdbSearchTitle, tmdbTvSeasons, tmdbTvSeasonEpisodes, tmdbSimilar, tmdbImages } from '@/services/tmdb';
+import { plexTvAddToWatchlist } from '@/services/plextv';
+import { getTraktTokens, traktAddToWatchlist } from '@/services/trakt';
 import PersonModal from '@/components/PersonModal';
 import { useEffect, useState } from 'react';
 import DetailsHero from '@/components/DetailsHero';
@@ -62,6 +64,7 @@ export default function Details() {
   const [personName, setPersonName] = useState<string | undefined>(undefined);
   const [tmdbCtx, setTmdbCtx] = useState<{ media?: 'movie'|'tv'; id?: string } | undefined>(undefined);
   const [kind, setKind] = useState<'movie'|'tv'|undefined>(undefined);
+  const [watchIds, setWatchIds] = useState<{ tmdbId?: string; imdbId?: string; plexKey?: string; media?: 'movie'|'tv' }>({});
 
   useEffect(() => {
     // expose setter for trailer mute to toggle function
@@ -160,10 +163,14 @@ export default function Details() {
             // If this Plex item has a TMDB GUID, prefer TMDB textual metadata and recs/videos
             const tmdbGuid = (m.Guid || []).map((g:any)=>String(g.id||''))
               .find((g:string)=>g.includes('tmdb://')||g.includes('themoviedb://'));
+            const imdbGuid = (m.Guid || []).map((g:any)=>String(g.id||''))
+              .find((g:string)=>g.includes('imdb://'));
+            setWatchIds({ tmdbId: tmdbGuid ? tmdbGuid.split('://')[1] : undefined, imdbId: imdbGuid ? imdbGuid.split('://')[1] : undefined, plexKey: String(m.ratingKey||''), media: (m.type==='movie'?'movie':'tv') });
             if (s.tmdbBearer && tmdbGuid) {
               const tid = tmdbGuid.split('://')[1];
               const mediaType = (m.type === 'movie') ? 'movie' : 'tv';
               setKind(mediaType);
+              setTmdbCtx({ media: mediaType as any, id: String(tid) });
                 try {
                   const d: any = await tmdbDetails(s.tmdbBearer!, mediaType as any, tid);
                   setTitle(d.title || d.name || title);
@@ -252,6 +259,7 @@ export default function Details() {
               setSimilar((sim.results || []).slice(0, 8).map((r: any) => ({ id: `tmdb:${media}:${r.id}`, title: r.title || r.name, image: tmdbImage(r.backdrop_path, 'w780') || tmdbImage(r.poster_path, 'w500') })));
             } catch {}
             setTmdbCtx({ media: media as any, id: String(tmdbId) });
+            setWatchIds({ tmdbId: String(tmdbId), media: (media as any) });
             // Try to fetch a logo for the TMDB item
             try {
               const imgs: any = await tmdbImages(s.tmdbBearer!, media as any, tmdbId, 'en,null');
@@ -525,7 +533,11 @@ export default function Details() {
         }}
         playable={id?.startsWith('plex:') || !!plexMappedId}
         onPlay={playSelected}
-        onAddToList={() => setToast('Added to My List')}
+        watchlistProps={{
+          itemId: id!,
+          itemType: (kind==='tv'?'show':'movie') as any,
+          tmdbId: tmdbCtx?.id || watchIds.tmdbId,
+        }}
         onMarkWatched={() => setToast('Marked as Watched')}
         onPersonClick={(person) => {
           setPersonId(person.id);
@@ -678,6 +690,8 @@ export default function Details() {
     </div>
   );
 }
+
+// Removed custom addToMyList in favor of WatchlistButton in hero
 
 async function watchOnPlex(url: string) {
   try {

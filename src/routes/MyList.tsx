@@ -446,7 +446,7 @@ export default function MyList() {
                   {/* Watchlist toggle (when not in bulk mode) */}
                   {!bulkMode && (
                     <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <WatchlistButton itemId={item.id} itemType={item.mediaType} tmdbId={item.tmdbId} variant="icon" />
+                      <WatchlistButton itemId={item.id} itemType={item.mediaType} tmdbId={item.tmdbId} variant="button" />
                     </div>
                   )}
 

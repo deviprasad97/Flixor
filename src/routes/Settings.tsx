@@ -3,6 +3,7 @@ import { loadSettings, saveSettings } from '@/state/settings';
 import { forget } from '@/services/cache';
 import { createPin, pollPin, getResources, buildAuthUrl, pickBestConnection } from '@/services/plextv_auth';
 import { TraktAuth } from '@/components/TraktAuth';
+import { getTraktTokens } from '@/services/trakt';
 
 export default function Settings() {
   const initial = loadSettings();
@@ -11,6 +12,8 @@ export default function Settings() {
   const [tmdbKey, setTmdbKey] = useState(initial.tmdbBearer || '');
   const [traktKey, setTraktKey] = useState(initial.traktClientId || '');
   const [plexTvToken, setPlexTvToken] = useState(initial.plexTvToken || '');
+  const [watchlistProvider, setWatchlistProvider] = useState<'trakt'|'plex'>(initial.watchlistProvider || 'trakt');
+  const [traktConnected, setTraktConnected] = useState<boolean>(!!initial.traktTokens);
   const [tmdbStatus, setTmdbStatus] = useState<string>('');
   const [plexStatus, setPlexStatus] = useState<string>('');
   const [auth, setAuth] = useState<{pinId?: number; code?: string}>({});
@@ -18,8 +21,14 @@ export default function Settings() {
   const [selectedServer, setSelectedServer] = useState<any>(initial.plexServer);
 
   useEffect(() => {
-    const s = saveSettings({ plexBaseUrl: plexUrl, plexToken, tmdbBearer: tmdbKey, traktClientId: traktKey, plexTvToken });
-  }, [plexUrl, plexToken, tmdbKey, traktKey, plexTvToken]);
+    saveSettings({ plexBaseUrl: plexUrl, plexToken, tmdbBearer: tmdbKey, traktClientId: traktKey, plexTvToken, watchlistProvider });
+  }, [plexUrl, plexToken, tmdbKey, traktKey, plexTvToken, watchlistProvider]);
+
+  useEffect(() => {
+    const onTraktChanged = () => setTraktConnected(!!(getTraktTokens()));
+    window.addEventListener('trakt-auth-changed', onTraktChanged);
+    return () => window.removeEventListener('trakt-auth-changed', onTraktChanged);
+  }, []);
 
   return (
     <div className="min-h-screen">
@@ -120,6 +129,23 @@ export default function Settings() {
           <L label="Plex Token"><input value={plexToken} onChange={(e) => setPlexToken(e.target.value)} placeholder="" className="input" /></L>
           <L label="TMDB API Key"><input value={tmdbKey} onChange={(e) => setTmdbKey(e.target.value)} className="input" /></L>
           <L label="Plex Account Token (Watchlist)"><input value={plexTvToken} onChange={(e) => setPlexTvToken(e.target.value)} placeholder="Plex.tv account token" className="input" /></L>
+          <L label="Watchlist Provider">
+            <select
+              className="input"
+              value={watchlistProvider}
+              onChange={(e)=> {
+                const v = e.target.value as 'trakt'|'plex';
+                setWatchlistProvider(v);
+                try { window.dispatchEvent(new CustomEvent('app-toast', { detail: `Watchlist provider: ${v === 'trakt' ? 'Trakt' : 'Plex'}` })); } catch {}
+              }}
+            >
+              <option value="trakt">Trakt</option>
+              <option value="plex">Plex</option>
+            </select>
+            {watchlistProvider === 'trakt' && !traktConnected && (
+              <div className="text-xs text-yellow-300 mt-1">Trakt not connected — use the Trakt section above to sign in.</div>
+            )}
+          </L>
           <div className="flex gap-3 pt-2">
             <button className="btn" onClick={async () => {
               setTmdbStatus('Testing…');

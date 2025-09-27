@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { VideoSeekSlider } from 'react-video-seek-slider';
 import PlexVideoPlayer from './PlexVideoPlayer';
 import '../styles/player.css';
+import { Replay10Icon, Forward10Icon } from '@/components/icons/Replay10';
 import {
   PlexConfig,
   plexMetadata,
@@ -161,6 +162,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
     const saved = localStorage.getItem('player_volume');
     return saved ? parseFloat(saved) : 1;
   });
+  const lastVolRef = useRef<number>(parseFloat(localStorage.getItem('player_volume_last') || '0.8') || 0.8);
   const [playbackRate, setPlaybackRate] = useState(1);
   
   // UI state
@@ -198,6 +200,42 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
   // Timeline update interval
   const timelineIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Persist volume and track last non-zero
+  useEffect(() => {
+    try {
+      localStorage.setItem('player_volume', String(volume));
+      if (volume > 0) {
+        lastVolRef.current = volume;
+        localStorage.setItem('player_volume_last', String(volume));
+      }
+      const v = videoRef.current; if (v) v.volume = Math.max(0, Math.min(1, volume));
+    } catch {}
+  }, [volume]);
+
+  // Keyboard shortcuts for volume
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        setVolume((v) => v === 0 ? (parseFloat(localStorage.getItem('player_volume_last')||'0.8')||0.8) : 0);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault(); setVolume((v)=> Math.min(1, v + 0.05));
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault(); setVolume((v)=> Math.max(0, v - 0.05));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Click anywhere on video to toggle play/pause (ignore controls)
+  function handleBackdropClick(e: React.MouseEvent) {
+    const el = e.target as HTMLElement;
+    if (el.closest('.player-controls') || el.closest('button') || el.closest('input') || el.closest('select') || el.closest('textarea')) return;
+    const v = videoRef.current; if (!v) return;
+    if (playing) { v.pause(); setPlaying(false); } else { v.play().catch(()=>{}); setPlaying(true); }
+  }
 
   // Load metadata and initialize player
   useEffect(() => {
@@ -790,7 +828,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
   const hasDV = metadata ? hasDolbyVision(metadata) : false;
 
   return (
-    <div ref={containerRef} className="fixed inset-0 bg-black z-50">
+    <div ref={containerRef} className="fixed inset-0 bg-black z-50" onClick={handleBackdropClick}>
       {streamUrl && (
         <div className="absolute inset-0">
           <PlexVideoPlayer
@@ -909,7 +947,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
         </div>
 
         {/* Bottom controls */}
-        <div className="absolute bottom-0 left-0 right-0 p-6">
+        <div className="absolute bottom-0 left-0 right-0 p-6 player-controls">
           <div className="mx-auto">
             {/* Seek bar */}
             <div className="mb-4 h-12">
@@ -936,7 +974,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
               <div className="flex items-center gap-4">
                 {/* Play/Pause */}
                 <button
-                  className="p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                  className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center"
                   onClick={() => {
                     const video = videoRef.current;
                     if (video) {
@@ -950,11 +988,11 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
                   }}
                 >
                   {playing ? (
-                    <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
                     </svg>
                   ) : (
-                    <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M8 5v14l11-7z" />
                     </svg>
                   )}
@@ -962,35 +1000,33 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
 
                 {/* Skip buttons */}
                 <button
-                  className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                  className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center"
                   onClick={() => {
                     const video = videoRef.current;
                     if (video) video.currentTime = Math.max(0, currentTime - 10);
                   }}
                 >
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
-                  </svg>
+                  <Replay10Icon className="w-7 h-7 text-white" />
                 </button>
                 <button
-                  className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                  className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center"
                   onClick={() => {
                     const video = videoRef.current;
                     if (video) video.currentTime = Math.min(duration, currentTime + 10);
                   }}
                 >
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z" />
-                  </svg>
+                  <Forward10Icon className="w-7 h-7 text-white" />
                 </button>
 
                 {/* Volume */}
-                <div className="relative">
+                <div className="flex items-center">
                   <button
-                    className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                    className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center"
                     onClick={() => setShowVolumeSlider(!showVolumeSlider)}
+                    aria-label="Volume"
+                    title="Volume"
                   >
-                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
                       {volume === 0 ? (
                         <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
                       ) : volume < 0.5 ? (
@@ -1000,29 +1036,30 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
                       )}
                     </svg>
                   </button>
-                  {showVolumeSlider && (
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-black/90 rounded-lg p-3">
-                      <div className="h-24 w-8 relative">
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={volume * 100}
-                          onChange={(e) => setVolume(parseInt(e.target.value) / 100)}
-                          className="absolute h-24 w-2 appearance-none bg-white/20 rounded-full outline-none cursor-pointer"
-                          style={{ 
-                            writingMode: 'vertical-lr' as any, 
-                            WebkitAppearance: 'slider-vertical',
-                            transform: 'translateX(-50%)',
-                            left: '50%'
-                          }}
-                        />
-                      </div>
-                      <div className="text-xs text-center mt-1 text-white/60">
-                        {Math.round(volume * 100)}%
+                  <div className="ml-3 overflow-hidden transition-[width] duration-200" style={{ width: showVolumeSlider ? '18rem' : 0 }}>
+                    <div className={`bg-black/90 rounded-2xl px-4 py-3 ring-1 ring-white/10 shadow-xl w-[18rem] transition-all duration-200 ${showVolumeSlider ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}>
+                      <div className="flex items-center gap-3">
+                        <svg className="w-5 h-5 text-white flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
+                        </svg>
+                        <div className="relative flex-1 h-1.5">
+                          <div className="absolute inset-0 bg-white/20 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full bg-gradient-to-r from-red-500 to-red-600" style={{ width: `${Math.round(volume*100)}%`, transition: 'width 160ms ease' }} />
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={Math.round(volume * 100)}
+                            onChange={(e) => setVolume((parseInt(e.target.value) || 0) / 100)}
+                            aria-label="Volume"
+                            className="range-h absolute inset-0 w-full h-full cursor-pointer"
+                          />
+                        </div>
+                        <div className="w-12 text-right text-xs text-white/70">{Math.round(volume * 100)}%</div>
                       </div>
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 {/* Time display */}

@@ -39,6 +39,7 @@ export type AppSettings = {
   traktTokens?: string; // JSON stringified TraktTokens
   traktScrobbleEnabled?: boolean;
   traktSyncEnabled?: boolean;
+  watchlistProvider?: 'trakt' | 'plex';
 };
 
 const KEY = 'app.settings.v1';
