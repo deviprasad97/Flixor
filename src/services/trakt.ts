@@ -1,11 +1,6 @@
 import { loadSettings, saveSettings } from '@/state/settings';
 import { cached } from '@/services/cache';
 
-// Check if running in Tauri context
-function isTauri() {
-  // @ts-ignore
-  return typeof window !== 'undefined' && window.__TAURI__ !== undefined;
-}
 
 // Use proxy in development to avoid CORS
 const TRAKT = import.meta.env.DEV ? '/api/trakt' : 'https://api.trakt.tv';
@@ -96,10 +91,7 @@ export interface TraktEpisode {
 
 // Authentication
 export async function traktRequestDeviceCode(): Promise<TraktDeviceCode> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_device_code', { clientId: CLIENT_ID });
-  }
+  // Web fallback - use proxy in dev
 
   // Web fallback - use proxy in dev
   const response = await fetch(`${TRAKT}/oauth/device/code`, {
@@ -120,14 +112,7 @@ export async function traktRequestDeviceCode(): Promise<TraktDeviceCode> {
 }
 
 export async function traktPollForToken(deviceCode: string): Promise<TraktTokens | null> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_poll_token', {
-      deviceCode,
-      clientId: CLIENT_ID,
-      clientSecret: CLIENT_SECRET
-    });
-  }
+  // Web fallback
 
   // Web fallback
   const response = await fetch(`${TRAKT}/oauth/device/token`, {
@@ -155,14 +140,7 @@ export async function traktPollForToken(deviceCode: string): Promise<TraktTokens
 }
 
 export async function traktRefreshToken(refreshToken: string): Promise<TraktTokens> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_refresh_token', {
-      refreshToken,
-      clientId: CLIENT_ID,
-      clientSecret: CLIENT_SECRET
-    });
-  }
+  // Web fallback
 
   // Web fallback
   const response = await fetch(`${TRAKT}/oauth/token`, {
@@ -186,14 +164,7 @@ export async function traktRefreshToken(refreshToken: string): Promise<TraktToke
 }
 
 export async function traktRevokeToken(accessToken: string): Promise<void> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_revoke_token', {
-      accessToken,
-      clientId: CLIENT_ID,
-      clientSecret: CLIENT_SECRET
-    });
-  }
+  // Web fallback
 
   // Web fallback
   const response = await fetch(`${TRAKT}/oauth/revoke`, {
@@ -215,10 +186,7 @@ export async function traktRevokeToken(accessToken: string): Promise<void> {
 
 // User
 export async function traktGetUserProfile(accessToken: string): Promise<TraktUser> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_user_profile', { accessToken });
-  }
+  // Web-only
 
   // Web fallback
   const response = await fetch(`${TRAKT}/users/me`, {
@@ -237,10 +205,7 @@ export async function traktGetUserProfile(accessToken: string): Promise<TraktUse
 }
 
 export async function traktGetUserSettings(accessToken: string): Promise<any> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_user_settings', { accessToken });
-  }
+  // Web-only
 
   // Web fallback
   const response = await fetch(`${TRAKT}/users/settings`, {
@@ -260,10 +225,7 @@ export async function traktGetUserSettings(accessToken: string): Promise<any> {
 
 // Scrobbling
 export async function traktScrobbleStart(accessToken: string, item: TraktScrobble): Promise<any> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_scrobble_start', { accessToken, item });
-  }
+  // Web-only
 
   const response = await fetch(`${TRAKT}/scrobble/start`, {
     method: 'POST',
@@ -281,10 +243,7 @@ export async function traktScrobbleStart(accessToken: string, item: TraktScrobbl
 }
 
 export async function traktScrobblePause(accessToken: string, item: TraktScrobble): Promise<any> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_scrobble_pause', { accessToken, item });
-  }
+  // Web-only
 
   const response = await fetch(`${TRAKT}/scrobble/pause`, {
     method: 'POST',
@@ -302,10 +261,7 @@ export async function traktScrobblePause(accessToken: string, item: TraktScrobbl
 }
 
 export async function traktScrobbleStop(accessToken: string, item: TraktScrobble): Promise<any> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_scrobble_stop', { accessToken, item });
-  }
+  // Web-only
 
   const response = await fetch(`${TRAKT}/scrobble/stop`, {
     method: 'POST',
@@ -324,10 +280,7 @@ export async function traktScrobbleStop(accessToken: string, item: TraktScrobble
 
 // History
 export async function traktGetHistory(accessToken: string, type?: 'movies' | 'shows', limit?: number): Promise<any[]> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_history', { accessToken, type, limit });
-  }
+  // Web-only
 
   let url = `${TRAKT}/users/me/history`;
   if (type) url += `/${type}`;
@@ -346,10 +299,7 @@ export async function traktGetHistory(accessToken: string, type?: 'movies' | 'sh
 }
 
 export async function traktAddToHistory(accessToken: string, items: any[]): Promise<any> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_history_add', { accessToken, items });
-  }
+  // Web-only
 
   const response = await fetch(`${TRAKT}/sync/history`, {
     method: 'POST',
@@ -367,10 +317,7 @@ export async function traktAddToHistory(accessToken: string, items: any[]): Prom
 }
 
 export async function traktRemoveFromHistory(accessToken: string, items: any[]): Promise<any> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_history_remove', { accessToken, items });
-  }
+  // Web-only
 
   const response = await fetch(`${TRAKT}/sync/history/remove`, {
     method: 'POST',
@@ -389,10 +336,7 @@ export async function traktRemoveFromHistory(accessToken: string, items: any[]):
 
 // Watchlist
 export async function traktGetWatchlist(accessToken: string, type?: 'movies' | 'shows'): Promise<any[]> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_watchlist', { accessToken, type });
-  }
+  // Web-only
 
   let url = `${TRAKT}/users/me/watchlist`;
   if (type) url += `/${type}`;
@@ -410,10 +354,7 @@ export async function traktGetWatchlist(accessToken: string, type?: 'movies' | '
 }
 
 export async function traktAddToWatchlist(accessToken: string, items: any[]): Promise<any> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_watchlist_add', { accessToken, items });
-  }
+  // Web-only
 
   const response = await fetch(`${TRAKT}/sync/watchlist`, {
     method: 'POST',
@@ -431,10 +372,7 @@ export async function traktAddToWatchlist(accessToken: string, items: any[]): Pr
 }
 
 export async function traktRemoveFromWatchlist(accessToken: string, items: any[]): Promise<any> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_watchlist_remove', { accessToken, items });
-  }
+  // Web-only
 
   const response = await fetch(`${TRAKT}/sync/watchlist/remove`, {
     method: 'POST',
@@ -453,10 +391,7 @@ export async function traktRemoveFromWatchlist(accessToken: string, items: any[]
 
 // Progress
 export async function traktGetProgress(accessToken: string, type: 'shows', sort?: string): Promise<any[]> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_progress', { accessToken, type, sort });
-  }
+  // Web-only
 
   let url = `${TRAKT}/users/me/watched/${type}/progress`;
   if (sort) url += `?sort=${sort}`;
@@ -475,10 +410,6 @@ export async function traktGetProgress(accessToken: string, type: 'shows', sort?
 
 // Recommendations
 export async function traktGetRecommendations(accessToken: string, type: 'movies' | 'shows', limit?: number): Promise<any[]> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_recommendations', { accessToken, type, limit });
-  }
 
   let url = `${TRAKT}/recommendations/${type}`;
   if (limit) url += `?limit=${limit}`;
@@ -497,10 +428,6 @@ export async function traktGetRecommendations(accessToken: string, type: 'movies
 
 // Search
 export async function traktSearch(query: string, type?: 'movie' | 'show' | 'episode', limit?: number): Promise<any[]> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_search', { query, type, limit, clientId: CLIENT_ID });
-  }
 
   const searchType = type || 'movie,show';
   let url = `${TRAKT}/search/${searchType}?query=${encodeURIComponent(query)}`;
@@ -519,10 +446,6 @@ export async function traktSearch(query: string, type?: 'movie' | 'show' | 'epis
 
 // Trending (existing, updated)
 export async function traktTrending(type: 'movies'|'shows' = 'movies', limit?: number): Promise<any[]> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_trending', { kind: type, clientId: CLIENT_ID, limit });
-  }
 
   let url = `${TRAKT}/${type}/trending`;
   if (limit) url += `?limit=${limit}`;
@@ -540,10 +463,6 @@ export async function traktTrending(type: 'movies'|'shows' = 'movies', limit?: n
 
 // Popular
 export async function traktPopular(type: 'movies' | 'shows', limit?: number): Promise<any[]> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('trakt_popular', { type, clientId: CLIENT_ID, limit });
-  }
 
   let url = `${TRAKT}/${type}/popular`;
   if (limit) url += `?limit=${limit}`;
@@ -561,11 +480,6 @@ export async function traktPopular(type: 'movies' | 'shows', limit?: number): Pr
 
 // Most Watched (charts) with period: daily | weekly | monthly | yearly | all
 export async function traktMostWatched(type: 'movies'|'shows', period: 'daily'|'weekly'|'monthly'|'yearly'|'all' = 'weekly', limit?: number): Promise<any[]> {
-  // Tauri path if available
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    // No dedicated tauri cmd; use web fallback
-  }
   const urlBase = `${TRAKT}/${type}/watched/${period}`;
   const url = limit ? `${urlBase}?limit=${limit}` : urlBase;
   // 30m TTL
@@ -580,10 +494,7 @@ export async function traktMostWatched(type: 'movies'|'shows', period: 'daily'|'
 
 // Anticipated (most lists)
 export async function traktAnticipated(type: 'movies'|'shows', limit?: number): Promise<any[]> {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    // No dedicated tauri cmd; use web fallback
-  }
+  // Web-only
   const urlBase = `${TRAKT}/${type}/anticipated`;
   const url = limit ? `${urlBase}?limit=${limit}` : urlBase;
   return cached(`trakt:anticipated:${type}:${limit||'all'}`, 30 * 60 * 1000, async () => {

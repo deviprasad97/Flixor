@@ -73,7 +73,7 @@ export default function TopNav() {
     saveSettings({ plexServers: list });
   }
   return (
-    <header className="fixed top-20-m left-0 right-0 z-50">
+    <header className="fixed left-0 right-0 z-50">
       <div ref={headerRef} className="relative h-16">
         <div className="nav-bg" />
         <div className="page-gutter h-16 flex items-center gap-8 relative z-10">

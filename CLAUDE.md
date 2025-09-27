@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a cross-platform Plex media client built with Tauri v2 (Rust backend) and React + TypeScript (frontend). It features Netflix-style UI with MPV player integration for media playback.
+This is a web Plex media client built with React + TypeScript. It features Netflix-style UI with a web player (HLS.js/DASH.js) for media playback.
 
 ## Common Development Commands
 
@@ -15,31 +15,12 @@ npm run build      # Build production frontend to dist/
 npm run preview    # Preview production build
 ```
 
-### Rust/Tauri Development
-```bash
-cd src-tauri
-cargo build              # Build Rust backend
-cargo build --release    # Build optimized release
-tauri dev               # Run full app in development mode
-tauri build             # Build production app bundles
-```
-
-### Platform-specific Media Stack Building
-```bash
-# macOS
-./scripts/build_media_macos.sh
-
-# Linux  
-./scripts/build_media_linux.sh
-
-# Windows
-./scripts/build_media_windows.sh
-```
+### Media
+Playback is via browser (HLS.js/DASH.js). No native media stack is required.
 
 ## Architecture
 
 ### Tech Stack
-- **Backend**: Tauri v2 with Rust, using Tokio for async runtime
 - **Frontend**: React 18 with TypeScript, React Router for navigation
 - **Styling**: Tailwind CSS with custom components
 - **Player**: MPV integration via libmpv (when feature enabled) or IPC fallback
@@ -54,21 +35,13 @@ tauri build             # Build production app bundles
 - **services/**: API clients for Plex, TMDB, Trakt, and streaming
 - **state/**: Application state management (settings, auth)
 
-#### Backend (`/src-tauri`)
-- **player/**: MPV player abstraction with trait-based engine system
-  - `PlayerEngine` trait allows swapping between libmpv and IPC implementations
-- **tauri_cmds.rs**: Tauri command handlers for frontend-backend communication
-- **net_api.rs**: Network API handlers for Plex, TMDB, and Trakt
+#### Backend
+No desktop backend. The app talks directly to Plex/TMDB/Trakt over HTTPS.
 
 ### Key Architectural Patterns
 
-1. **Player Abstraction**: The `PlayerEngine` trait in `src-tauri/src/player/mod.rs` provides a unified interface for different player backends (libmpv or IPC), managed through `PlayerState` with async mutex protection.
-
-2. **Tauri Commands**: All frontend-backend communication goes through Tauri's invoke system. Commands are defined in `src-tauri/src/tauri_cmds.rs` and `src-tauri/src/net_api.rs`.
-
-3. **Path Aliases**: TypeScript uses path aliases (@/components, @/routes, @/services, @/state) configured in both `tsconfig.json` and `vite.config.ts`.
-
-4. **Sidecar Binaries**: External binaries (mpv, ffmpeg, ffprobe) are bundled as sidecars, configured in `src-tauri/tauri.conf.json` under `bundle.externalBin`.
+1. **Web Player**: Single player path via HLS.js/DASH.js with Element Picture‑in‑Picture. 
+2. **Path Aliases**: TypeScript uses path aliases (@/components, @/routes, @/services, @/state) configured in `tsconfig.json` and `vite.config.ts`.
 
 ## Important Implementation Notes
 

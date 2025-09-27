@@ -14,11 +14,6 @@ function hdrs(clientId: string) {
 }
 
 export async function createPin(clientId: string) {
-  // @ts-ignore
-  if (window.__TAURI__) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('plex_tv_pin_create', { clientId });
-  }
   const res = await fetch(`${PLEX_TV}/api/v2/pins`, {
     method: 'POST',
     headers: hdrs(clientId),
@@ -28,22 +23,12 @@ export async function createPin(clientId: string) {
 }
 
 export async function pollPin(clientId: string, id: number) {
-  // @ts-ignore
-  if (window.__TAURI__) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('plex_tv_pin_poll', { clientId, pinId: id });
-  }
   const res = await fetch(`${PLEX_TV}/api/v2/pins/${id}`, { headers: hdrs(clientId) });
   if (!res.ok) throw new Error('Failed to poll PIN');
   return res.json();
 }
 
 export async function getResources(accountToken: string, clientId: string) {
-  // @ts-ignore
-  if (window.__TAURI__) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('plex_tv_resources', { accountToken, clientId });
-  }
   const h = { ...hdrs(clientId), 'X-Plex-Token': accountToken } as any;
   const res = await fetch(`${PLEX_TV}/api/v2/resources?includeHttps=1&includeRelay=1`, { headers: h });
   if (!res.ok) throw new Error('Failed to fetch resources');
@@ -117,11 +102,6 @@ export async function refreshPlexServers(): Promise<Array<{ name: string; client
 }
 
 export async function getUserProfile(accountToken: string, clientId: string) {
-  // @ts-ignore
-  if (window.__TAURI__) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('plex_tv_user', { accountToken, clientId });
-  }
   const h = { ...hdrs(clientId), 'X-Plex-Token': accountToken } as any;
   const res = await fetch(`${PLEX_TV}/api/v2/user`, { headers: h });
   if (!res.ok) throw new Error('Failed to fetch user profile');
@@ -129,11 +109,6 @@ export async function getUserProfile(accountToken: string, clientId: string) {
 }
 
 export async function getUsers(accountToken: string, clientId: string) {
-  // @ts-ignore
-  if (window.__TAURI__) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('plex_tv_users', { accountToken, clientId });
-  }
   const h = { ...hdrs(clientId), 'X-Plex-Token': accountToken } as any;
   const res = await fetch(`${PLEX_TV}/api/v2/users`, { headers: h });
   if (!res.ok) throw new Error('Failed to fetch users');

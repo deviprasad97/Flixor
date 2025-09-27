@@ -486,7 +486,7 @@ export default function Details() {
       ];
   const playSelected = async () => {
     try {
-    // Always go through in-app player so both Web and Tauri paths work consistently
+    // Always go through in-app player
     // Prefer mapped Plex id when available to ensure real playback instead of sample fallback
     const targetId = (plexMappedId || id)!;
     const ver = activeVersion ? `?v=${encodeURIComponent(activeVersion)}` : '';
@@ -695,15 +695,7 @@ export default function Details() {
 
 async function watchOnPlex(url: string) {
   try {
-    // @ts-ignore
-    if (window.__TAURI__) {
-      // @ts-ignore
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('player_open', { url });
-      await invoke('player_play');
-      return;
-    }
-    // Fallback: open in a new tab
+    // Web-only: open in a new tab
     window.open(url, '_blank');
   } catch (e) { console.error(e); }
 }

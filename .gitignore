@@ -9,6 +9,4 @@ target/
 *.local
 coverage/
 tmp/
-/.tauri-updater/
 vendor/
-src-tauri/bin/

@@ -13,15 +13,6 @@ export type TmdbTrendingItem = { id: number; title?: string; name?: string; post
 
 export async function tmdbTrending(key: string, media: 'movie'|'tv' = 'movie', window: 'day'|'week' = 'week') {
   const token = normalizeBearer(key);
-  // Tauri backend path preferred to avoid CORS and keep secrets local
-  // @ts-ignore
-  if (window.__TAURI__) {
-    // @ts-ignore
-    const { invoke } = await import('@tauri-apps/api/core');
-    // 30m TTL for feeds
-    return cached(`tmdb:trending:${media}:${window}`, 30 * 60 * 1000, async () =>
-      await (invoke('tmdb_trending', { media, window, bearer: token }) as Promise<{ results: TmdbTrendingItem[] }>));
-  }
   return cached(`tmdb:trending:${media}:${window}`, 30 * 60 * 1000, async () => {
     const res = await fetch(`${TMDB}/trending/${media}/${window}`, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) throw new Error(`TMDB error ${res.status}`);
@@ -35,7 +26,6 @@ export function tmdbImage(path?: string, size: 'w500'|'w780'|'w1280'|'original' 
 
 export async function tmdbDetails(key: string, media: 'movie'|'tv', id: string | number) {
   const token = normalizeBearer(key);
-  // Prefer Tauri backend fetch where possible; fallback to web
   return cached(`tmdb:details:${media}:${id}`, 24 * 60 * 60 * 1000, async () => {
     const url = `${TMDB}/${media}/${id}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });

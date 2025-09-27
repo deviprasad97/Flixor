@@ -8,18 +8,6 @@ import { plexImage, plexMetadata } from '@/services/plex';
 import { plexTranscodeMp4Url, plexTranscodeDashUrl, plexTimeline, plexMetadataWithMarkers } from '@/services/plex_stream';
 import { plexChildren } from '@/services/plex';
 
-// IPC to Tauri commands (stubbed for web preview)
-async function tauriInvoke<T = any>(cmd: string, args?: Record<string, any>): Promise<T> {
-  // @ts-ignore
-  if (window.__TAURI__) {
-    // @ts-ignore
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke(cmd, args);
-  }
-  // Web fallback: simulate
-  return Promise.resolve({} as T);
-}
-
 export default function Player() {
   const { id } = useParams();
   const loc = useLocation();
@@ -146,11 +134,7 @@ export default function Player() {
       // Fallback: sample
       if (!url) { url = `https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4`; setIsDash(false); }
       // @ts-ignore
-      if (window.__TAURI__) {
-        tauriInvoke('player_open', { url }).catch(() => {});
-      } else {
-        setWebUrl(url);
-      }
+      setWebUrl(url);
     }
     open();
   }, [id, quality, resolution]);
@@ -191,9 +175,8 @@ export default function Player() {
     nav(url);
   }
 
-  // @ts-ignore
-  const isTauri = !!window.__TAURI__;
-  if (!isTauri) {
+  // Web-only path
+  {
     // Check if we have Plex configuration for advanced player
     const s = loadSettings();
     const useAdvanced = qs.get('advanced') === 'true' || true; // Default to advanced player
@@ -242,18 +225,6 @@ export default function Player() {
     }
   }
 
-  return (
-    <div className="fixed inset-0 bg-black">
-      {/* Video surface is rendered natively by mpv/libmpv. This view is control chrome. */}
-      <PlayerChrome
-        title={title || `Playing ${id}`}
-        isPlaying={isPlaying}
-        currentTime={currentTime}
-        duration={duration}
-        onBack={() => { tauriInvoke('player_stop').finally(() => nav(-1)); }}
-        onPlayPause={() => { setIsPlaying((p) => !p); tauriInvoke(isPlaying ? 'player_pause' : 'player_play'); }}
-        onSeek={(t) => { setCurrentTime(t); tauriInvoke('player_seek', { seconds: t }); }}
-      />
-    </div>
-  );
+  // Fallback safety (should not be hit in web-only)
+  return <div className="fixed inset-0 bg-black" />;
 }
