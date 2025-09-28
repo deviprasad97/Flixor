@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PlexUserProfile, PlexUser, loadSettings, saveSettings } from '@/state/settings';
-import { getUserProfile, getUsers } from '@/services/plextv_auth';
+import { apiClient, getCurrentUser } from '@/services/api';
 import { forget } from '@/services/cache';
 
 export default function UserDropdown() {
@@ -18,58 +18,27 @@ export default function UserDropdown() {
   }, []);
 
   async function loadUserProfile() {
-    const s = loadSettings();
+    try {
+      setLoading(true);
+      // Get user from backend session
+      const user = await getCurrentUser();
 
-    // Check cached profile first
-    if (s.plexUserProfile) {
-      setProfile(s.plexUserProfile);
-      if (s.plexUsers) setUsers(s.plexUsers);
-    }
-
-    // Fetch fresh profile if we have a token
-    if (s.plexAccountToken && s.plexClientId) {
-      try {
-        setLoading(true);
-        const userProfile: any = await getUserProfile(s.plexAccountToken, s.plexClientId);
-
+      if (user) {
         const profileData: PlexUserProfile = {
-          id: userProfile.id,
-          username: userProfile.username || userProfile.title || 'User',
-          email: userProfile.email || '',
-          thumb: userProfile.thumb,
-          title: userProfile.title,
-          hasPassword: userProfile.hasPassword || false,
-          authToken: s.plexAccountToken,
-          subscription: userProfile.subscription ? {
-            active: userProfile.subscription.active || false,
-            status: userProfile.subscription.status || 'free',
-            plan: userProfile.subscription.plan
-          } : undefined
+          id: user.id,
+          username: user.username || 'User',
+          email: user.email || '',
+          thumb: user.thumb,
+          title: user.username,
+          hasPassword: true,
+          subscription: user.subscription
         };
-
         setProfile(profileData);
-        saveSettings({ plexUserProfile: profileData });
-
-        // Try to get managed users
-        try {
-          const usersData: any = await getUsers(s.plexAccountToken, s.plexClientId);
-          const managedUsers: PlexUser[] = (usersData?.users || []).map((u: any) => ({
-            id: u.id,
-            username: u.username || u.title || 'User',
-            email: u.email,
-            thumb: u.thumb,
-            title: u.title,
-            isHome: u.home || false,
-            isRestricted: u.restricted || false
-          }));
-          setUsers(managedUsers);
-          saveSettings({ plexUsers: managedUsers });
-        } catch {}
-      } catch (err) {
-        console.error('Failed to load user profile:', err);
-      } finally {
-        setLoading(false);
       }
+    } catch (err) {
+      console.error('Failed to load user profile:', err);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -84,24 +53,33 @@ export default function UserDropdown() {
     }, 300);
   }
 
-  function handleSignOut() {
-    // Clear all authentication data
-    saveSettings({
-      plexAccountToken: undefined,
-      plexTvToken: undefined,
-      plexToken: undefined,
-      plexBaseUrl: undefined,
-      plexUserProfile: undefined,
-      plexUsers: undefined,
-      plexServer: undefined,
-      plexServers: undefined
-    });
+  async function handleSignOut() {
+    try {
+      // Logout from backend
+      await apiClient.logout();
 
-    // Clear cache
-    forget('plex:');
+      // Clear local storage
+      saveSettings({
+        plexAccountToken: undefined,
+        plexTvToken: undefined,
+        plexToken: undefined,
+        plexBaseUrl: undefined,
+        plexUserProfile: undefined,
+        plexUsers: undefined,
+        plexServer: undefined,
+        plexServers: undefined
+      });
 
-    // Navigate to login
-    nav('/login');
+      // Clear cache
+      forget('plex:');
+
+      // Navigate to login
+      nav('/login');
+    } catch (err) {
+      console.error('Failed to logout:', err);
+      // Navigate to login anyway
+      nav('/login');
+    }
   }
 
   function switchUser(user: PlexUser) {

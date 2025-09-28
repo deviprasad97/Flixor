@@ -4,6 +4,7 @@ import Row from '@/components/Row';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loadSettings, saveSettings } from '@/state/settings';
+import { apiClient, checkAuth } from '@/services/api';
 import { tmdbTrending, tmdbImage, tmdbVideos, tmdbImages, tmdbDetails } from '@/services/tmdb';
 import { traktTrending, isTraktAuthenticated } from '@/services/trakt';
 import { plexOnDeckGlobal, plexImage, plexLibs, plexSectionAll, plexMetadataWithExtras, plexPartUrl, plexLibrarySecondary, plexDir } from '@/services/plex';
@@ -36,61 +37,50 @@ export default function Home() {
   useEffect(() => {
     if (didInit.current) return; // prevent StrictMode double-run flicker
     didInit.current = true;
-    const s = loadSettings();
-    if (!s.plexBaseUrl && !s.plexToken && !s.plexAccountToken) {
-      nav('/login');
-      return;
-    }
-    // Auto Plex sign-in if no server configured
+
+    // Check backend authentication first
     (async () => {
-      if (!s.plexBaseUrl && !s.plexToken && !s.plexAccountToken) {
-        try {
-          const cid = s.plexClientId || crypto.randomUUID();
-          saveSettings({ plexClientId: cid });
-          const pin:any = await createPin(cid);
-          window.open(buildAuthUrl(cid, pin.code), '_blank');
-          const start = Date.now();
-          let authed: string | undefined;
-          while (Date.now() - start < 120000) {
-            const res:any = await pollPin(cid, pin.id);
-            if (res?.authToken) { authed = res.authToken; break; }
-            await new Promise(r => setTimeout(r, 3000));
-          }
-          if (authed) {
-            saveSettings({ plexAccountToken: authed });
-
-            // Fetch user profile
-            try {
-              const userProfile: any = await getUserProfile(authed, cid);
-              const profileData = {
-                id: userProfile.id,
-                username: userProfile.username || userProfile.title || 'User',
-                email: userProfile.email || '',
-                thumb: userProfile.thumb,
-                title: userProfile.title,
-                hasPassword: userProfile.hasPassword || false,
-                authToken: authed,
-                subscription: userProfile.subscription ? {
-                  active: userProfile.subscription.active || false,
-                  status: userProfile.subscription.status || 'free',
-                  plan: userProfile.subscription.plan
-                } : undefined
-              };
-              saveSettings({ plexUserProfile: profileData });
-            } catch {}
-
-            const resources:any = await getResources(authed, cid);
-            const servers = (resources || []).filter((r:any)=> r.product === 'Plex Media Server');
-            if (servers.length) {
-              const best = pickBestConnection(servers[0]);
-              if (best) saveSettings({ plexServer: { name: servers[0].name, clientIdentifier: servers[0].clientIdentifier, baseUrl: best.uri, token: best.token }, plexBaseUrl: best.uri, plexToken: best.token });
-            }
-          }
-        } catch {}
+      const isAuthenticated = await checkAuth();
+      if (!isAuthenticated) {
+        nav('/login');
+        return;
       }
+
+      // Get servers from backend
+      try {
+        const servers = await apiClient.getServers();
+        if (servers.length > 0) {
+          const server = servers[0];
+          saveSettings({
+            plexBaseUrl: server.baseUrl,
+            plexToken: server.token,
+            plexServer: {
+              name: server.name,
+              clientIdentifier: server.clientIdentifier,
+              baseUrl: server.baseUrl,
+              token: server.token
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Failed to get servers:', err);
+      }
+
+      // Continue with loading content
+      run();
     })();
+
+    // run() function is called from the auth check above
     async function run() {
       try {
+        let s = loadSettings(); // Load settings here
+
+        // Use default TMDB API key if not configured
+        if (!s.tmdbBearer) {
+          const DEFAULT_TMDB_KEY = 'db55323b8d3e4154498498a75642b381';
+          saveSettings({ tmdbBearer: DEFAULT_TMDB_KEY });
+          s = loadSettings();
+        }
         const rowsData: Array<{ title: string; items: Item[]; variant?: 'default'|'continue' }> = [];
         let tmdbHero: any | null = null;
         let plexHero: any | null = null;
@@ -273,7 +263,6 @@ export default function Home() {
         setLoading(false);
       }
     }
-    run();
   }, []);
 
   // Refresh entire app when server changes

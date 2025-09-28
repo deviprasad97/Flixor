@@ -1,0 +1,132 @@
+import 'reflect-metadata';
+import express, { Express } from 'express';
+import session from 'express-session';
+import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
+import cookieParser from 'cookie-parser';
+import { TypeormStore } from 'connect-typeorm';
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Load environment variables
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
+
+import { AppDataSource, initializeDatabase } from './db/data-source';
+import { Session } from './db/entities';
+import logger from './utils/logger';
+import { authRouter } from './api/auth';
+import { errorHandler } from './middleware/errorHandler';
+import { requestLogger } from './middleware/requestLogger';
+
+const serverLogger = logger.child({ component: 'server' });
+
+async function startServer() {
+  try {
+    // Initialize database
+    await initializeDatabase();
+
+    // Create Express app
+    const app: Express = express();
+    const PORT = parseInt(process.env.PORT || '3001', 10);
+    const HOST = process.env.HOST || '0.0.0.0';
+
+    // Trust proxy (for secure cookies behind reverse proxy)
+    app.set('trust proxy', 1);
+
+    // Basic middleware
+    app.use(compression());
+    app.use(helmet({
+      contentSecurityPolicy: false, // We'll handle CSP separately
+      crossOriginEmbedderPolicy: false,
+    }));
+
+    // CORS configuration
+    app.use(cors({
+      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    }));
+
+    // Body parsing
+    app.use(express.json({ limit: '10mb' }));
+    app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+    app.use(cookieParser());
+
+    // Request logging
+    app.use(requestLogger);
+
+    // Session configuration
+    const sessionRepository = AppDataSource.getRepository(Session);
+    app.use(session({
+      secret: process.env.SESSION_SECRET || 'change-this-in-production',
+      resave: false,
+      saveUninitialized: false,
+      store: new TypeormStore({
+        cleanupLimit: 2,
+        limitSubquery: false,
+        ttl: 86400, // 1 day in seconds
+      }).connect(sessionRepository),
+      cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      },
+      name: 'plex.sid',
+    }));
+
+    // Health check endpoint
+    app.get('/health', (req, res) => {
+      res.json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV,
+        database: AppDataSource.isInitialized ? 'connected' : 'disconnected',
+      });
+    });
+
+    // API routes
+    app.use('/api/auth', authRouter);
+
+    // 404 handler
+    app.use((req, res) => {
+      res.status(404).json({
+        error: 'Not Found',
+        message: `Cannot ${req.method} ${req.path}`,
+      });
+    });
+
+    // Error handling middleware (must be last)
+    app.use(errorHandler);
+
+    // Start server
+    app.listen(PORT, HOST, () => {
+      serverLogger.info(`🚀 Server running at http://${HOST}:${PORT}`);
+      serverLogger.info(`📝 Environment: ${process.env.NODE_ENV}`);
+      serverLogger.info(`🗄️  Database: ${process.env.DATABASE_PATH}`);
+      serverLogger.info(`🔐 Session store: TypeORM/SQLite`);
+    });
+
+    // Graceful shutdown
+    process.on('SIGTERM', async () => {
+      serverLogger.info('SIGTERM signal received: closing server');
+      await AppDataSource.destroy();
+      process.exit(0);
+    });
+
+    process.on('SIGINT', async () => {
+      serverLogger.info('SIGINT signal received: closing server');
+      await AppDataSource.destroy();
+      process.exit(0);
+    });
+
+  } catch (error) {
+    serverLogger.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+// Start the server
+startServer();
