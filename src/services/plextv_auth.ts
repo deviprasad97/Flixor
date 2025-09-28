@@ -90,15 +90,28 @@ export function pickBestConnection(resource: any): { uri: string; token: string 
 export async function refreshPlexServers(): Promise<Array<{ name: string; clientIdentifier: string; bestUri: string; token: string }>> {
   const { loadSettings } = await import('@/state/settings');
   const s = loadSettings();
-  if (!s.plexAccountToken || !s.plexClientId) return [];
-  const res: any = await getResources(s.plexAccountToken, s.plexClientId);
-  const list = (res || []).filter((r: any) => r.product === 'Plex Media Server');
-  const out: Array<{ name: string; clientIdentifier: string; bestUri: string; token: string }> = [];
-  for (const srv of list) {
-    const best = pickBestConnection(srv);
-    if (best) out.push({ name: srv.name, clientIdentifier: srv.clientIdentifier, bestUri: best.uri, token: best.token });
+
+  if (!s.plexAccountToken || !s.plexClientId) {
+    return [];
   }
-  return out;
+
+  try {
+    const res: any = await getResources(s.plexAccountToken, s.plexClientId);
+    const list = (res || []).filter((r: any) => r.product === 'Plex Media Server');
+    const out: Array<{ name: string; clientIdentifier: string; bestUri: string; token: string }> = [];
+
+    for (const srv of list) {
+      const best = pickBestConnection(srv);
+      if (best) {
+        out.push({ name: srv.name, clientIdentifier: srv.clientIdentifier, bestUri: best.uri, token: best.token });
+      }
+    }
+
+    return out;
+  } catch (error) {
+    console.error('Error fetching servers:', error);
+    throw error;
+  }
 }
 
 export async function getUserProfile(accountToken: string, clientId: string) {

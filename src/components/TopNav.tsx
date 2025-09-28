@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { loadSettings, saveSettings } from '@/state/settings';
 import { forget } from '@/services/cache';
 import { refreshPlexServers } from '@/services/plextv_auth';
+import { apiClient } from '@/services/api';
 import UserDropdown from '@/components/UserDropdown';
 
 const items = [
@@ -19,12 +20,76 @@ export default function TopNav() {
   const [open, setOpen] = useState(false);
   const [servers, setServers] = useState<Array<{ name: string; clientIdentifier: string; bestUri: string; token: string }>>([]);
   const [current, setCurrent] = useState<{ name: string } | null>(null);
+  const [loadingServers, setLoadingServers] = useState(false);
   const headerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const s = loadSettings();
     if (s.plexServer) setCurrent({ name: s.plexServer.name });
-    if (s.plexServers) setServers(s.plexServers);
+    if (s.plexServers) {
+      setServers(s.plexServers);
+    }
+
+    // Auto-fetch servers if no servers list is available
+    if (!s.plexServers || s.plexServers.length === 0) {
+      setLoadingServers(true);
+
+      // Try backend first, then Plex.tv
+      const fetchServers = async () => {
+        let list: Array<{ name: string; clientIdentifier: string; bestUri: string; token: string }> = [];
+
+        // Try backend API first
+        try {
+          const backendServers = await apiClient.getServers();
+          if (backendServers && backendServers.length > 0) {
+            list = backendServers.map((s: any) => ({
+              name: s.name,
+              clientIdentifier: s.clientIdentifier,
+              bestUri: s.baseUrl,
+              token: s.token
+            }));
+          }
+        } catch (backendError) {
+          // Fall back to Plex.tv if we have credentials
+          if (s.plexAccountToken && s.plexClientId) {
+            try {
+              list = await refreshPlexServers();
+            } catch (plexError) {
+              console.error('Plex.tv fetch also failed:', plexError);
+            }
+          }
+        }
+
+        if (list.length > 0) {
+          setServers(list);
+          saveSettings({ plexServers: list });
+
+          // If no server is currently selected, select the first one
+          if (!s.plexServer) {
+            const firstServer = list[0];
+            saveSettings({
+              plexServer: {
+                name: firstServer.name,
+                clientIdentifier: firstServer.clientIdentifier,
+                baseUrl: firstServer.bestUri,
+                token: firstServer.token
+              },
+              plexBaseUrl: firstServer.bestUri,
+              plexToken: firstServer.token
+            });
+            setCurrent({ name: firstServer.name });
+            // Notify app to refresh Plex-backed views
+            window.dispatchEvent(new CustomEvent('plex-server-changed', {
+              detail: { name: firstServer.name, baseUrl: firstServer.bestUri }
+            }));
+          }
+        }
+      };
+
+      fetchServers().finally(() => {
+        setLoadingServers(false);
+      });
+    }
   }, []);
 
   // Track scroll and drive background fade with rAF for smoothness
@@ -68,9 +133,55 @@ export default function TopNav() {
   }, [pathname]);
 
   async function doRefresh() {
-    const list = await refreshPlexServers();
-    setServers(list);
-    saveSettings({ plexServers: list });
+    setLoadingServers(true);
+    try {
+      let list: Array<{ name: string; clientIdentifier: string; bestUri: string; token: string }> = [];
+
+      // Try backend API first
+      try {
+        const backendServers = await apiClient.getServers();
+
+        if (backendServers && backendServers.length > 0) {
+          // Convert backend format to our expected format
+          list = backendServers.map((s: any) => ({
+            name: s.name,
+            clientIdentifier: s.clientIdentifier,
+            bestUri: s.baseUrl,
+            token: s.token
+          }));
+        }
+      } catch (backendError) {
+        // Fall back to direct Plex.tv approach if backend fails
+        list = await refreshPlexServers();
+      }
+
+      setServers(list);
+      saveSettings({ plexServers: list });
+
+      // If we got servers but none is selected, select the first one
+      if (list.length > 0 && !current) {
+        const firstServer = list[0];
+        saveSettings({
+          plexServer: {
+            name: firstServer.name,
+            clientIdentifier: firstServer.clientIdentifier,
+            baseUrl: firstServer.bestUri,
+            token: firstServer.token
+          },
+          plexBaseUrl: firstServer.bestUri,
+          plexToken: firstServer.token
+        });
+        setCurrent({ name: firstServer.name });
+        // Notify app to refresh Plex-backed views
+        window.dispatchEvent(new CustomEvent('plex-server-changed', {
+          detail: { name: firstServer.name, baseUrl: firstServer.bestUri }
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to refresh servers:', err);
+    } finally {
+      setLoadingServers(false);
+    }
   }
   return (
     <header className="fixed left-0 right-0 z-50">
@@ -102,17 +213,32 @@ export default function TopNav() {
                 <div className="absolute right-0 mt-2 w-64 rounded-lg ring-1 ring-white/10 bg-black/80 backdrop-blur p-2 z-50">
                   <div className="text-xs text-neutral-400 px-2 py-1">Servers</div>
                   <div className="max-h-60 overflow-auto">
-                    {servers.map((s, i) => (
-                      <button key={i} className="w-full text-left px-2 py-1 rounded hover:bg-white/10" onClick={()=>{
-                        // Persist new server and clear Plex caches
-                        saveSettings({ plexServer: { name: s.name, clientIdentifier: s.clientIdentifier, baseUrl: s.bestUri, token: s.token }, plexBaseUrl: s.bestUri, plexToken: s.token });
-                        forget('plex:');
-                        setCurrent({ name: s.name }); setOpen(false);
-                        // Notify app to refresh Plex-backed views
-                        window.dispatchEvent(new CustomEvent('plex-server-changed', { detail: { name: s.name, baseUrl: s.bestUri } }));
-                      }}>{s.name}</button>
-                    ))}
-                    {servers.length===0 && <div className="px-2 py-1 text-neutral-400">No servers</div>}
+                    {loadingServers ? (
+                      <div className="px-2 py-1 text-neutral-400">Loading servers...</div>
+                    ) : (
+                      <>
+                        {servers.map((s, i) => {
+                          const isSelected = current?.name === s.name;
+                          return (
+                            <button
+                              key={i}
+                              className={`w-full text-left px-2 py-1 rounded hover:bg-white/10 flex items-center justify-between ${isSelected ? 'bg-white/10' : ''}`}
+                              onClick={()=>{
+                                // Persist new server and clear Plex caches
+                                saveSettings({ plexServer: { name: s.name, clientIdentifier: s.clientIdentifier, baseUrl: s.bestUri, token: s.token }, plexBaseUrl: s.bestUri, plexToken: s.token });
+                                forget('plex:');
+                                setCurrent({ name: s.name }); setOpen(false);
+                                // Notify app to refresh Plex-backed views
+                                window.dispatchEvent(new CustomEvent('plex-server-changed', { detail: { name: s.name, baseUrl: s.bestUri } }));
+                              }}>
+                              <span>{s.name}</span>
+                              {isSelected && <span className="text-xs text-green-500">✓</span>}
+                            </button>
+                          );
+                        })}
+                        {servers.length===0 && <div className="px-2 py-1 text-neutral-400">No servers</div>}
+                      </>
+                    )}
                   </div>
                   <div className="border-t border-white/10 mt-2 pt-2 flex justify-between">
                     <button className="text-sm hover:text-white" onClick={doRefresh}>Refresh</button>
