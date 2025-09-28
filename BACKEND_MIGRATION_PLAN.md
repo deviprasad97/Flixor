@@ -118,7 +118,7 @@ GET  /api/cache/keys         // List cache keys
 
 ### 3.2 Default API Key Implementation
 - [ ] Bake in default key: `db55323b8d3e4154498498a75642b381`
-- [ ] Implement conservative rate limits (2 req/sec)
+- [ ] Implement conservative rate limits
 - [ ] Setup longer cache TTLs for shared key
 - [ ] Add usage tracking for default key
 

@@ -1,5 +1,6 @@
 // Backend API client
 const API_BASE = 'http://localhost:3001/api';
+const BACKEND_BASE = 'http://localhost:3001';
 
 class ApiClient {
   private async request(path: string, options?: RequestInit) {
@@ -49,6 +50,35 @@ class ApiClient {
 
   async validateSession() {
     return this.request('/auth/validate');
+  }
+
+  // Image proxy methods
+  getImageProxyUrl(imageUrl: string, options?: { width?: number; height?: number; quality?: number; format?: string }): string {
+    const params = new URLSearchParams({ url: imageUrl });
+    if (options?.width) params.append('w', String(options.width));
+    if (options?.height) params.append('h', String(options.height));
+    if (options?.quality) params.append('q', String(options.quality));
+    if (options?.format) params.append('f', options.format);
+    return `${BACKEND_BASE}/api/image/proxy?${params.toString()}`;
+  }
+
+  getPlexImageProxyUrl(path: string, token: string, server?: string, options?: { width?: number; height?: number }): string {
+    const params = new URLSearchParams({ url: path, token });
+    if (server) params.append('server', server);
+    if (options?.width) params.append('w', String(options.width));
+    if (options?.height) params.append('h', String(options.height));
+    return `${BACKEND_BASE}/api/image/plex?${params.toString()}`;
+  }
+
+  // Cache management
+  async getCacheStats(bucket?: string) {
+    const path = bucket ? `/cache/stats?bucket=${bucket}` : '/cache/stats';
+    return this.request(path);
+  }
+
+  async flushCache(bucket?: string) {
+    const path = bucket ? `/cache/flush?bucket=${bucket}` : '/cache/flush';
+    return this.request(path, { method: 'POST' });
   }
 }
 

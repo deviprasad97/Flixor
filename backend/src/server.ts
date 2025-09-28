@@ -14,8 +14,13 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 import { AppDataSource, initializeDatabase } from './db/data-source';
 import { Session } from './db/entities';
+import { cacheManager } from './services/cache/CacheManager';
 import logger from './utils/logger';
 import { authRouter } from './api/auth';
+import cacheRoutes from './api/cache';
+import imageProxyRoutes from './api/image-proxy';
+import tmdbRoutes from './api/tmdb';
+import plexRoutes from './api/plex';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 
@@ -89,6 +94,10 @@ async function startServer() {
 
     // API routes
     app.use('/api/auth', authRouter);
+    app.use('/api/cache', cacheRoutes);
+    app.use('/api/image', imageProxyRoutes);
+    app.use('/api/tmdb', tmdbRoutes);
+    app.use('/api/plex', plexRoutes);
 
     // 404 handler
     app.use((req, res) => {

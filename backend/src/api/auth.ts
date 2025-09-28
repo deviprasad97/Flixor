@@ -279,3 +279,4 @@ router.get('/servers', requireAuth, async (req: AuthenticatedRequest, res: Respo
 });
 
 export { router as authRouter };
+export default router;

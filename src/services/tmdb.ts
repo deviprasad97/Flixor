@@ -1,204 +1,249 @@
-const TMDB = 'https://api.themoviedb.org/3';
+/**
+ * TMDB Service - Proxies all requests through backend
+ */
+
+const BACKEND_BASE = 'http://localhost:3001/api/tmdb';
 const IMG = 'https://image.tmdb.org/t/p';
+
+// Keep local cache for already fetched data
 import { cached } from './cache';
 
-function normalizeBearer(input: string): string {
-  if (!input) return '';
-  // Remove leading "Bearer ", trim, and drop any non JWT-safe ASCII (JWT uses base64url + dots)
-  const token = input.replace(/^\s*Bearer\s+/i, '').trim();
-  return token.replace(/[^A-Za-z0-9\-_.]/g, '');
-}
+/**
+ * Fetch from backend TMDB proxy
+ */
+async function tmdbBackendFetch(path: string, params?: Record<string, any>): Promise<any> {
+  const url = new URL(`${BACKEND_BASE}${path}`);
 
-function tmdbFetch(url: string, key: string): Promise<Response> {
-  // Check if it's a Bearer token (v4 API) or regular API key (v3 API)
-  const isBearer = key.length > 100 || key.includes('.');
-
-  if (isBearer) {
-    const token = normalizeBearer(key);
-    return fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  } else {
-    const separator = url.includes('?') ? '&' : '?';
-    return fetch(`${url}${separator}api_key=${key}`);
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) {
+        url.searchParams.append(key, String(value));
+      }
+    });
   }
+
+  const response = await fetch(url.toString(), {
+    credentials: 'include', // Include cookies for session
+  });
+
+  if (!response.ok) {
+    throw new Error(`TMDB API error: ${response.status}`);
+  }
+
+  return response.json();
 }
 
-export type TmdbTrendingItem = { id: number; title?: string; name?: string; poster_path?: string; backdrop_path?: string };
+// Export types
+export type TmdbTrendingItem = {
+  id: number;
+  title?: string;
+  name?: string;
+  poster_path?: string;
+  backdrop_path?: string;
+  media_type?: string;
+};
 
+/**
+ * Get trending content (uses backend proxy)
+ */
 export async function tmdbTrending(key: string, media: 'movie'|'tv' = 'movie', window: 'day'|'week' = 'week') {
+  // Note: key parameter is kept for compatibility but not used (backend handles auth)
   return cached(`tmdb:trending:${media}:${window}`, 30 * 60 * 1000, async () => {
-    const url = `${TMDB}/trending/${media}/${window}`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+    return tmdbBackendFetch(`/trending/${media}/${window}`);
   });
 }
 
+/**
+ * Get image URL (client-side helper)
+ */
 export function tmdbImage(path?: string, size: 'w500'|'w780'|'w1280'|'original' = 'w780') {
   return path ? `${IMG}/${size}${path}` : undefined;
 }
 
+/**
+ * Get movie or TV details
+ */
 export async function tmdbDetails(key: string, media: 'movie'|'tv', id: string | number) {
   return cached(`tmdb:details:${media}:${id}`, 24 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/${media}/${id}`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+    return tmdbBackendFetch(`/${media}/${id}`);
   });
 }
 
+/**
+ * Get credits
+ */
 export async function tmdbCredits(key: string, media: 'movie'|'tv', id: string | number) {
   return cached(`tmdb:credits:${media}:${id}`, 24 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/${media}/${id}/credits`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+    return tmdbBackendFetch(`/${media}/${id}/credits`);
   });
 }
 
+/**
+ * Get external IDs
+ */
 export async function tmdbExternalIds(key: string, media: 'movie'|'tv', id: string | number) {
   return cached(`tmdb:external:${media}:${id}`, 24 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/${media}/${id}/external_ids`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+    const details = await tmdbBackendFetch(`/${media}/${id}`, {
+      append_to_response: 'external_ids'
+    });
+    return details.external_ids || {};
   });
 }
 
+/**
+ * Get recommendations
+ */
 export async function tmdbRecommendations(key: string, media: 'movie'|'tv', id: string | number, page?: number) {
   return cached(`tmdb:recs:${media}:${id}:${page||1}`, 6 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/${media}/${id}/recommendations${page?`?page=${page}`:''}`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+    return tmdbBackendFetch(`/${media}/${id}/recommendations`, { page });
   });
 }
 
+/**
+ * Get similar content
+ */
 export async function tmdbSimilar(key: string, media: 'movie'|'tv', id: string | number, page?: number) {
-  
   return cached(`tmdb:similar:${media}:${id}:${page||1}`, 6 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/${media}/${id}/similar${page?`?page=${page}`:''}`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+    return tmdbBackendFetch(`/${media}/${id}/similar`, { page });
   });
 }
 
+/**
+ * Search for titles
+ */
 export async function tmdbSearchTitle(key: string, media: 'movie'|'tv', query: string, year?: string | number) {
-  
-  const endpoint = media === 'movie' ? 'search/movie' : 'search/tv';
-  const q = new URLSearchParams({ query, include_adult: 'false', ...(year ? (media==='movie'? { year: String(year) } : { first_air_date_year: String(year) }) : {}) });
   return cached(`tmdb:search:${media}:${query}:${year||''}`, 6 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/${endpoint}?${q.toString()}`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+    const endpoint = media === 'movie' ? '/search/movie' : '/search/tv';
+    return tmdbBackendFetch(endpoint, { query, year });
   });
 }
 
+/**
+ * Get TV seasons
+ */
 export async function tmdbTvSeasons(key: string, tvId: string | number) {
-  
   return cached(`tmdb:tv:seasons:${tvId}`, 24 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/tv/${tvId}`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+    return tmdbBackendFetch(`/tv/${tvId}`);
   });
 }
 
+/**
+ * Get TV season episodes
+ */
 export async function tmdbTvSeasonEpisodes(key: string, tvId: string | number, seasonNumber: number) {
-  
   return cached(`tmdb:tv:season:${tvId}:${seasonNumber}`, 24 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/tv/${tvId}/season/${seasonNumber}`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+    const details = await tmdbBackendFetch(`/tv/${tvId}`);
+    const season = details.seasons?.find((s: any) => s.season_number === seasonNumber);
+    return season || {};
   });
 }
 
+/**
+ * Search for person
+ */
 export async function tmdbSearchPerson(key: string, name: string) {
-  
   return cached(`tmdb:searchPerson:${name}`, 6 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/search/person?query=${encodeURIComponent(name)}`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+    return tmdbBackendFetch('/search/multi', { query: name });
   });
 }
 
+/**
+ * Get person combined credits
+ */
 export async function tmdbPersonCombined(key: string, personId: string | number) {
-  
   return cached(`tmdb:personCombined:${personId}`, 6 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/person/${personId}/combined_credits`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+    return tmdbBackendFetch(`/person/${personId}/combined_credits`);
   });
 }
 
+/**
+ * Get videos
+ */
 export async function tmdbVideos(key: string, media: 'movie'|'tv', id: string | number) {
-  
   return cached(`tmdb:videos:${media}:${id}`, 6 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/${media}/${id}/videos`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+    return tmdbBackendFetch(`/${media}/${id}/videos`);
   });
 }
 
+/**
+ * Search multi
+ */
 export async function tmdbSearchMulti(key: string, query: string) {
-  
   return cached(`tmdb:searchMulti:${query}`, 6 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/search/multi?query=${encodeURIComponent(query)}`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+    return tmdbBackendFetch('/search/multi', { query });
   });
 }
 
+/**
+ * Get popular content
+ */
 export async function tmdbPopular(key: string, media: 'movie'|'tv' = 'movie') {
-  
   return cached(`tmdb:popular:${media}`, 6 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/${media}/popular`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+    return tmdbBackendFetch(`/${media}/popular`);
   });
 }
 
+/**
+ * Get images
+ */
 export async function tmdbImages(key: string, media: 'movie'|'tv', id: string | number, includeImageLanguage = 'en,null') {
-  
   return cached(`tmdb:images:${media}:${id}:${includeImageLanguage}`, 24 * 60 * 60 * 1000, async () => {
-    const url = `${TMDB}/${media}/${id}/images?include_image_language=${encodeURIComponent(includeImageLanguage)}`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+    return tmdbBackendFetch(`/${media}/${id}/images`, { language: includeImageLanguage });
   });
 }
 
+/**
+ * Get best backdrop URL
+ */
 export async function tmdbBestBackdropUrl(key: string, media: 'movie'|'tv', id: string | number, lang: string = 'en'): Promise<string | undefined> {
-  // Prefer language-specific backdrops (e.g., with title text), else fall back to any
   try {
-    const imgs: any = await tmdbImages(key, media, id, `${lang},null`);
-    const list: any[] = imgs?.backdrops || [];
-    if (!list.length) return undefined;
-    const pick = (arr: any[]) => arr.sort((a: any, b: any) => (b.width || 0) - (a.width || 0))[0];
-    const en = pick(list.filter((b: any) => b.iso_639_1 === lang));
-    const nul = pick(list.filter((b: any) => !b.iso_639_1));
+    const imgs = await tmdbImages(key, media, id, `${lang},null`);
+    const list = (imgs as any).backdrops || [];
+
+    // Pick best backdrop
+    const pick = (arr: any[]) => arr.sort((a: any, b: any) => b.vote_average - a.vote_average)[0];
+    const en = pick(list.filter((x: any) => x.iso_639_1 === lang));
+    const nul = pick(list.filter((x: any) => !x.iso_639_1));
     const any = pick(list);
     const sel = en || nul || any;
+
     return sel?.file_path ? tmdbImage(sel.file_path, 'original') : undefined;
-  } catch { return undefined; }
+  } catch {
+    return undefined;
+  }
 }
 
-// Upcoming movies (regionalized)
+/**
+ * Get upcoming movies
+ */
 export async function tmdbUpcoming(key: string, region?: string) {
-  
-  const r = region ? `&region=${encodeURIComponent(region)}` : '';
-  // 30m TTL
-  return cached(`tmdb:upcoming:${region || 'any'}`, 30 * 60 * 1000, async () => {
-    const url = `${TMDB}/movie/upcoming?language=en-US${r}`;
-    const res = await tmdbFetch(url, key);
-    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
-    return res.json();
+  return cached(`tmdb:upcoming:${region || 'US'}`, 30 * 60 * 1000, async () => {
+    return tmdbBackendFetch('/movie/upcoming', { region });
   });
 }
+
+/**
+ * Discover movies
+ */
+export async function tmdbDiscoverMovies(key: string, params?: any) {
+  const cacheKey = `tmdb:discover:movie:${JSON.stringify(params || {})}`;
+  return cached(cacheKey, 6 * 60 * 60 * 1000, async () => {
+    return tmdbBackendFetch('/discover/movie', params);
+  });
+}
+
+/**
+ * Discover TV shows
+ */
+export async function tmdbDiscoverTV(key: string, params?: any) {
+  const cacheKey = `tmdb:discover:tv:${JSON.stringify(params || {})}`;
+  return cached(cacheKey, 6 * 60 * 60 * 1000, async () => {
+    return tmdbBackendFetch('/discover/tv', params);
+  });
+}
+
+/**
+ * Note: The 'key' parameter is maintained in all functions for backward compatibility
+ * but is no longer used since the backend handles authentication with its own keys.
+ * This can be removed in a future refactor once all calling code is updated.
+ */
