@@ -6,6 +6,8 @@ import path from 'path';
 import { cacheManager } from '../services/cache/CacheManager';
 import { createLogger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
+import { getPlexClient } from '../services/plex/PlexClient';
 
 const router = Router();
 const logger = createLogger('image-proxy');
@@ -146,28 +148,42 @@ router.get('/proxy', async (req: Request, res: Response, next: NextFunction) => 
  * Proxy Plex images with authentication
  * GET /api/image/plex?url=/library/metadata/123/thumb&token=xxx&w=500
  */
-router.get('/plex', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/plex', requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { url, token, server } = req.query;
+    // Support either full url+token or just a library-relative path resolved via current user's Plex server
+    const { url, path: plexPath, token, server } = req.query as any;
 
-    if (!url || !token) {
-      throw new AppError('URL and token are required', 400);
+    let baseUrl: string | undefined = typeof server === 'string' && server ? server : undefined;
+    let accessToken: string | undefined = typeof token === 'string' && token ? token : undefined;
+    let resourcePath: string | undefined = typeof plexPath === 'string' && plexPath ? plexPath : (typeof url === 'string' ? url : undefined);
+
+    if (!resourcePath) {
+      throw new AppError('Missing image path or url', 400);
     }
 
-    const serverUrl = server || process.env.PLEX_SERVER_URL;
-    if (!serverUrl) {
-      throw new AppError('Plex server URL not configured', 500);
+    // If token/server not provided, derive from current user's active server
+    if (!baseUrl || !accessToken) {
+      const client = await getPlexClient(req.user!.id);
+      const serverInfo = client.getServerInfo();
+      baseUrl = `${serverInfo.protocol}://${serverInfo.host}:${serverInfo.port}`;
+      accessToken = serverInfo.accessToken;
+    }
+
+    // Build full URL from path if needed
+    let fullUrl: string;
+    try {
+      // If already absolute URL, keep as is
+      const test = new URL(resourcePath);
+      fullUrl = resourcePath;
+    } catch {
+      const sep = resourcePath.includes('?') ? '&' : '?';
+      fullUrl = `${String(baseUrl).replace(/\/$/, '')}${resourcePath}${sep}X-Plex-Token=${accessToken}`;
     }
 
     const options = parseImageOptions(req.query);
 
-    // Build full Plex URL
-    const fullUrl = `${serverUrl}${url}${url.includes('?') ? '&' : '?'}X-Plex-Token=${token}`;
-
     // Generate cache key
-    const cacheKey = cacheManager.constructor.generateHashKey(
-      JSON.stringify({ url: fullUrl, ...options })
-    );
+    const cacheKey = cacheManager.constructor.generateHashKey(JSON.stringify({ url: fullUrl, ...options }));
     const cacheDir = path.join(process.cwd(), 'cache', 'images', 'plex');
     const cachePath = path.join(cacheDir, `${cacheKey}.${options.format}`);
 

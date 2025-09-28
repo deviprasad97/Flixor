@@ -44,6 +44,7 @@ async function startServer() {
     app.use(helmet({
       contentSecurityPolicy: false, // We'll handle CSP separately
       crossOriginEmbedderPolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow images/media to be embedded from this server
     }));
 
     // CORS configuration

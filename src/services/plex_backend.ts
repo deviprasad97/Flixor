@@ -37,8 +37,8 @@ export async function plexBackendRecentlyAdded(libraryKey?: string) {
 }
 
 export async function plexBackendLibraryAll(sectionKey: string, params?: Record<string, any>) {
-  const items = await backendFetch<any[]>(`/library/${encodeURIComponent(sectionKey)}/all`, params);
-  return { MediaContainer: { Metadata: items || [] } };
+  const mc = await backendFetch<any>(`/library/${encodeURIComponent(sectionKey)}/all`, params);
+  return { MediaContainer: mc?.MediaContainer || mc };
 }
 
 export async function plexBackendMetadata(ratingKey: string) {

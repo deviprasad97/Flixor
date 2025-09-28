@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { loadSettings } from '@/state/settings';
 import { plexDir, plexImage } from '@/services/plex';
+import { apiClient } from '@/services/api';
 import { plexTvWatchlist } from '@/services/plextv';
 import { tmdbRecommendations, tmdbSimilar, tmdbImage } from '@/services/tmdb';
 
@@ -61,11 +62,15 @@ export default function BrowseModal() {
         const mc = res?.MediaContainer;
         setTitle([mc?.title1, mc?.title2].filter(Boolean).join(' - ') || 'Browse');
         const meta = mc?.Metadata || [];
-        const rows: Item[] = meta.map((m: any) => ({
-          id: `plex:${m.ratingKey}`,
-          title: m.title || m.grandparentTitle || 'Title',
-          image: plexImage(s.plexBaseUrl!, s.plexToken!, m.thumb || m.parentThumb || m.grandparentThumb || m.art),
-        }));
+        const rows: Item[] = meta.map((m: any) => {
+          const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+          const p = m.thumb || m.parentThumb || m.grandparentThumb || m.art;
+          return {
+            id: `plex:${m.ratingKey}`,
+            title: m.title || m.grandparentTitle || 'Title',
+            image: USE_BACKEND ? apiClient.getPlexImageNoToken(p || '') : plexImage(s.plexBaseUrl!, s.plexToken!, p),
+          };
+        });
         setItems(rows);
       } catch (e: any) {
         setError(e?.message || 'Failed to load');

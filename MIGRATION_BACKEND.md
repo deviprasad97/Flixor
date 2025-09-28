@@ -7,7 +7,7 @@ This document captures what we have migrated from a frontend‑only app to our b
 - Backend (Express + TypeORM + SQLite + Cache) is running and provides TMDB proxy, Plex auth/session, Plex library/search/metadata APIs, image proxy, and progress updates.
 - Frontend has a feature flag to switch Plex reads and player progress to the backend while keeping streaming behavior identical to the previous frontend (direct DASH URL with X‑Plex params + token).
 
-Flag for dev: `VITE_USE_BACKEND_PLEX=true`.
+Flag for dev: `VITE_USE_BACKEND_PLEX=true` (now set by default in `.env`).
 
 ## What’s Done (Backend + Frontend)
 
@@ -41,6 +41,7 @@ Flag for dev: `VITE_USE_BACKEND_PLEX=true`.
   - Plex images: still built as `baseUrl + path + X‑Plex‑Token` on the client in many places; can be migrated to `/api/image/plex`.
 - Residual direct Plex calls in some views
   - Most reads now use backend under the flag; remaining edge calls (e.g., play queue or certain details flows) can be swapped to backend helpers as needed.
+  - Aggregated lists (e.g., New & Popular’s cross‑library recently added/popular) still use frontend helpers that fan out to Plex; consider backend aggregator endpoints later.
 
 ## Current Dev Toggle
 
@@ -64,14 +65,12 @@ Phase 2 wrap (stabilization)
 - Audit remaining direct Plex reads and swap to backend equivalents where missing.
 
 Phase 3 – Player hardening
-- Audio/Subtitles
-  - Add backend endpoints to update audio/subtitle stream selection (wrap `PUT /library/parts/:id`) and wire in AdvancedPlayer.
-  - Ensure we do not need to reload the manifest unnecessarily (evaluate mid‑stream changes vs. restart policy).
 - Progress + Scrobble
   - Confirm final scrobble and rating flows via backend from the player UI.
+- Defer audio/subtitle endpoints for now (we kept streaming URLs frontend‑style; stream selection works fine client‑side and backend adds little value until a proxy path is adopted).
 
 Phase 4 – Image proxy adoption (security + caching)
-- Replace Plex image URLs in the UI with `/api/image/plex` to remove `X‑Plex‑Token` from the client for images.
+- Replace Plex image URLs in the UI with `/api/image/plex?path=...` so the backend derives server/token from the signed‑in user; no tokens in the browser.
 - Keep TMDB direct unless optimization is needed.
 
 Phase 5 – Optional: Proxy‑based streaming (tokenless)
@@ -108,4 +107,3 @@ Phase 6 – Security & QoL
 - Player
   - Streaming URL: `GET /api/plex/stream/:ratingKey` (returns direct DASH URL)
   - Progress: `POST /api/plex/progress` with `{ ratingKey, time, duration, state }`
-

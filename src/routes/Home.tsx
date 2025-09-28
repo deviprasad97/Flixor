@@ -150,7 +150,8 @@ export default function Home() {
               : await plexOnDeckGlobal({ baseUrl: s.plexBaseUrl, token: s.plexToken });
             const meta = deck?.MediaContainer?.Metadata || [];
             const items: any[] = meta.slice(0, 10).map((m: any, i: number) => {
-              const img = plexImage(s.plexBaseUrl!, s.plexToken!, m.thumb || m.parentThumb || m.grandparentThumb || m.art);
+              const p = m.thumb || m.parentThumb || m.grandparentThumb || m.art;
+              const img = USE_BACKEND ? apiClient.getPlexImageNoToken(p || '') : plexImage(s.plexBaseUrl!, s.plexToken!, p);
               const duration = (m.duration || 0) / 1000;
               const vo = (m.viewOffset || 0) / 1000;
               const progress = duration > 0 ? Math.min(100, Math.max(1, Math.round((vo / duration) * 100))) : 0;
@@ -195,7 +196,11 @@ export default function Home() {
                   ? await plexBackendDir(path)
                   : await plexDir({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, path);
                 const meta = data?.MediaContainer?.Metadata || [];
-                const items: Item[] = meta.slice(0, 12).map((m: any) => ({ id: `plex:${m.ratingKey}`, title: m.title || m.grandparentTitle || 'Title', image: plexImage(s.plexBaseUrl!, s.plexToken!, m.thumb || m.parentThumb || m.grandparentThumb || m.art) }));
+                const items: Item[] = meta.slice(0, 12).map((m: any) => {
+                  const p = m.thumb || m.parentThumb || m.grandparentThumb || m.art;
+                  const img = USE_BACKEND ? apiClient.getPlexImageNoToken(p || '') : plexImage(s.plexBaseUrl!, s.plexToken!, p);
+                  return { id: `plex:${m.ratingKey}`, title: m.title || m.grandparentTitle || 'Title', image: img };
+                });
                 const row: any = { title: gr.label, items };
                 row.browseKey = path;
                 rowsData.push(row);
@@ -222,8 +227,10 @@ export default function Home() {
                 : await plexMetadataWithExtras({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, String(m.ratingKey));
               const mm = meta?.MediaContainer?.Metadata?.[0];
               if (!mm) continue;
-              const poster = plexImage(s.plexBaseUrl!, s.plexToken!, mm.thumb || mm.parentThumb || mm.grandparentThumb);
-              const backdrop = plexImage(s.plexBaseUrl!, s.plexToken!, mm.art || mm.parentThumb || mm.grandparentThumb || mm.thumb);
+              const pPoster = mm.thumb || mm.parentThumb || mm.grandparentThumb;
+              const pBackdrop = mm.art || mm.parentThumb || mm.grandparentThumb || mm.thumb;
+              const poster = USE_BACKEND ? apiClient.getPlexImageNoToken(pPoster || '') : plexImage(s.plexBaseUrl!, s.plexToken!, pPoster);
+              const backdrop = USE_BACKEND ? apiClient.getPlexImageNoToken(pBackdrop || '') : plexImage(s.plexBaseUrl!, s.plexToken!, pBackdrop);
               const extra = mm?.Extras?.Metadata?.[0]?.Media?.[0]?.Part?.[0]?.key as string | undefined;
               const videoUrl = extra ? plexPartUrl(s.plexBaseUrl!, s.plexToken!, extra) : undefined;
 

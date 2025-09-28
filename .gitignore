@@ -10,3 +10,5 @@ target/
 coverage/
 tmp/
 vendor/
+backend/cache/images/
+backend/cache/images/plex/

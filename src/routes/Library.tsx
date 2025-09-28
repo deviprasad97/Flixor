@@ -7,6 +7,7 @@ import { plexBackendLibraries, plexBackendLibraryAll } from '@/services/plex_bac
 import SectionBanner from '@/components/SectionBanner';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
+import { apiClient } from '@/services/api';
 
 type Item = { id: string; title: string; image?: string; subtitle?: string; badge?: string };
 
@@ -83,13 +84,18 @@ export default function Library() {
         ? await plexBackendLibraryAll(active, { sort: 'addedAt:desc', offset: nextOffset, limit: size })
         : await plexSectionAll({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, active, withContainer(base, nextOffset, size));
       const mc = all?.MediaContainer?.Metadata || [];
-      const mapped: Item[] = mc.map((m: any, i: number) => ({
-        id: String(m.ratingKey || i),
-        title: m.title || m.grandparentTitle,
-        image: plexImage(s.plexBaseUrl!, s.plexToken!, m.thumb || m.parentThumb || m.grandparentThumb),
-        subtitle: m.year ? String(m.year) : undefined,
-        badge: 'Plex',
-      }));
+      const mapped: Item[] = mc.map((m: any, i: number) => {
+        const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+        const p = m.thumb || m.parentThumb || m.grandparentThumb;
+        const img = USE_BACKEND ? apiClient.getPlexImageNoToken(p || '') : plexImage(s.plexBaseUrl!, s.plexToken!, p);
+        return {
+          id: String(m.ratingKey || i),
+          title: m.title || m.grandparentTitle,
+          image: img,
+          subtitle: m.year ? String(m.year) : undefined,
+          badge: 'Plex',
+        };
+      });
       if (reset) setItems(mapped); else setItems((prev) => [...prev, ...mapped]);
       const total = all?.MediaContainer?.totalSize ?? (reset ? mapped.length : items.length + mapped.length);
       const newStart = (reset ? 0 : start) + mapped.length;
@@ -142,12 +148,17 @@ export default function Library() {
                     ? await plexBackendLibraryAll(active, { sort: 'addedAt:desc', offset: start, limit: size })
                     : await plexSectionAll({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, active, qs);
                   const mc = all?.MediaContainer?.Metadata || [];
-                  const mapped: Item[] = mc.map((m: any, i: number) => ({
-                    id: String(m.ratingKey || i),
-                    title: m.title || m.grandparentTitle,
-                    image: plexImage(s.plexBaseUrl!, s.plexToken!, m.thumb || m.parentThumb || m.grandparentThumb),
-                    subtitle: m.year ? String(m.year) : undefined,
-                  }));
+                  const mapped: Item[] = mc.map((m: any, i: number) => {
+                    const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+                    const p = m.thumb || m.parentThumb || m.grandparentThumb;
+                    const img = USE_BACKEND ? apiClient.getPlexImageNoToken(p || '') : plexImage(s.plexBaseUrl!, s.plexToken!, p);
+                    return {
+                      id: String(m.ratingKey || i),
+                      title: m.title || m.grandparentTitle,
+                      image: img,
+                      subtitle: m.year ? String(m.year) : undefined,
+                    };
+                  });
                   setItems((prev) => [...prev, ...mapped]);
                   const total = all?.MediaContainer?.totalSize ?? (start + mapped.length);
                   const newStart = start + mapped.length;

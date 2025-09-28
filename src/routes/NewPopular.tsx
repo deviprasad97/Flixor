@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { tmdbTrending, tmdbImage, tmdbUpcoming, tmdbDetails, tmdbVideos, tmdbImages } from '@/services/tmdb';
 import { traktAnticipated, traktMostWatched } from '@/services/trakt';
 import { plexRecentlyAdded, plexImage, plexFindByGuid, plexPopular } from '@/services/plex';
+import { apiClient } from '@/services/api';
 import { loadSettings } from '@/state/settings';
 import { cached } from '@/services/cache';
 import HomeHero from '@/components/HomeHero';
@@ -103,7 +104,9 @@ export default function NewPopular() {
     const recent = plexRecent.slice(0, 20).map((item: any) => ({
       id: `plex:${item.ratingKey}`,
       title: item.title,
-      image: item.thumb ? plexImage(plexBaseUrl, plexToken, item.thumb) : undefined,
+      image: item.thumb ? (((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
+        ? apiClient.getPlexImageNoToken(item.thumb)
+        : plexImage(plexBaseUrl, plexToken, item.thumb)) : undefined,
       subtitle: item.year?.toString(),
       badge: 'New',
       mediaType: item.type === 'movie' ? 'movie' : 'show' as const
@@ -114,7 +117,9 @@ export default function NewPopular() {
     const pop = (plexPop || []).slice(0, 20).map((item: any) => ({
       id: `plex:${item.ratingKey}`,
       title: item.title || item.grandparentTitle,
-      image: item.thumb ? plexImage(plexBaseUrl, plexToken, item.thumb || item.parentThumb || item.grandparentThumb) : undefined,
+      image: item.thumb ? (((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
+        ? apiClient.getPlexImageNoToken((item.thumb || item.parentThumb || item.grandparentThumb) || '')
+        : plexImage(plexBaseUrl, plexToken, item.thumb || item.parentThumb || item.grandparentThumb)) : undefined,
       subtitle: item.year?.toString(),
       badge: 'Popular',
       mediaType: item.type === 'movie' ? 'movie' : 'show' as const

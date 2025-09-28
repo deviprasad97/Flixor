@@ -128,9 +128,9 @@ router.get('/library/:id/all',
       });
 
       const client = await getPlexClient(req.user!.id);
-      const contents = await client.getLibraryContents(id, offset, limit, extraParams);
+      const container = await client.getLibraryContents(id, offset, limit, extraParams);
 
-      res.json(contents);
+      res.json(container);
     } catch (error: any) {
       logger.error('Failed to get library contents', error);
       next(new AppError(error.message || 'Failed to get library contents', 500));

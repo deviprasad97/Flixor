@@ -5,6 +5,7 @@ import WebPlayer from '@/components/WebPlayer';
 import AdvancedPlayer from '@/components/AdvancedPlayer';
 import { loadSettings } from '@/state/settings';
 import { plexImage, plexMetadata } from '@/services/plex';
+import { apiClient } from '@/services/api';
 import { plexTranscodeMp4Url, plexTranscodeDashUrl, plexTimeline, plexMetadataWithMarkers } from '@/services/plex_stream';
 import { backendStreamUrl, backendUpdateProgress } from '@/services/plex_backend_player';
 import { plexChildren } from '@/services/plex';
@@ -75,7 +76,11 @@ export default function Player() {
             const m = meta?.MediaContainer?.Metadata?.[0];
             if (m) {
               setTitle(m.title || m.grandparentTitle || '');
-              setPoster(plexImage(s.plexBaseUrl!, s.plexToken!, m.thumb || m.parentThumb || m.grandparentThumb));
+              const p = m.thumb || m.parentThumb || m.grandparentThumb;
+              const img = ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
+                ? apiClient.getPlexImageNoToken(p || '')
+                : plexImage(s.plexBaseUrl!, s.plexToken!, p);
+              setPoster(img);
               setRatingKey(String(m.ratingKey));
               // Fetch markers (intro, credits)
               try {

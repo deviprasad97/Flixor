@@ -5,6 +5,7 @@ import { loadSettings } from '@/state/settings';
 import { traktTrending, traktPopular, isTraktAuthenticated, ensureValidToken, traktGetWatchlist, traktGetRecommendations, traktGetHistory } from '@/services/trakt';
 import { tmdbBestBackdropUrl } from '@/services/tmdb';
 import { plexFindByGuid, plexImage } from '@/services/plex';
+import { apiClient } from '@/services/api';
 import SkeletonRow from '@/components/SkeletonRow';
 
 interface TraktSectionProps {
@@ -129,7 +130,10 @@ export function TraktSection({ type = 'trending', mediaType = 'movies', title }:
         const hit = await plexByTmdb(tmdbId, typeNum as 1|2);
         if (hit) {
           const rk = String(hit.ratingKey);
-          const img = plexImage(s.plexBaseUrl!, s.plexToken!, hit.art || hit.thumb || hit.parentThumb || hit.grandparentThumb) || placeholderImg();
+          const p = hit.art || hit.thumb || hit.parentThumb || hit.grandparentThumb;
+          const img = ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
+            ? (p ? apiClient.getPlexImageNoToken(p) : placeholderImg())
+            : (plexImage(s.plexBaseUrl!, s.plexToken!, p) || placeholderImg());
           out.push({ id: `plex:${rk}`, title, image: img });
           continue;
         }
@@ -154,7 +158,10 @@ export function TraktSection({ type = 'trending', mediaType = 'movies', title }:
             const hit = (byImdb?.MediaContainer?.Metadata || [])[0];
             if (hit) {
               const rk = String(hit.ratingKey);
-              const img = plexImage(s.plexBaseUrl!, s.plexToken!, hit.art || hit.thumb || hit.parentThumb || hit.grandparentThumb) || placeholderImg();
+              const p = hit.art || hit.thumb || hit.parentThumb || hit.grandparentThumb;
+              const img = ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
+                ? (p ? apiClient.getPlexImageNoToken(p) : placeholderImg())
+                : (plexImage(s.plexBaseUrl!, s.plexToken!, p) || placeholderImg());
               out.push({ id: `plex:${rk}`, title, image: img });
               continue;
             }

@@ -161,7 +161,7 @@ export class PlexClient {
     offset = 0,
     limit = 50,
     params?: Record<string, any>
-  ): Promise<PlexMetadata[]> {
+  ): Promise<any> {
     const usp = new URLSearchParams();
     usp.set('X-Plex-Container-Start', String(offset));
     usp.set('X-Plex-Container-Size', String(limit));
@@ -181,7 +181,7 @@ export class PlexClient {
       300 // 5 minutes cache
     );
 
-    return data.MediaContainer.Metadata || [];
+    return data.MediaContainer;
   }
 
   /**

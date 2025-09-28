@@ -77,6 +77,16 @@ class ApiClient {
     return `${BACKEND_BASE}/api/image/plex?${params.toString()}`;
   }
 
+  // New: no-token Plex image (backend derives server/token from session)
+  getPlexImageNoToken(path: string, options?: { width?: number; height?: number; quality?: number; format?: string }) {
+    const params = new URLSearchParams({ path });
+    if (options?.width) params.append('w', String(options.width));
+    if (options?.height) params.append('h', String(options.height));
+    if (options?.quality) params.append('q', String(options.quality));
+    if (options?.format) params.append('f', options.format);
+    return `${BACKEND_BASE}/api/image/plex?${params.toString()}`;
+  }
+
   // Cache management
   async getCacheStats(bucket?: string) {
     const path = bucket ? `/cache/stats?bucket=${bucket}` : '/cache/stats';

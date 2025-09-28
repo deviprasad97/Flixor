@@ -5,6 +5,7 @@ import { loadSettings } from '@/state/settings';
 import { plexMetadata, plexImage, plexSearch, plexChildren, plexFindByGuid, plexComprehensiveGuidSearch, plexMetadataWithExtras, plexPartUrl } from '@/services/plex';
 import { plexBackendMetadataWithExtras, plexBackendDir, plexBackendSearch } from '@/services/plex_backend';
 import { tmdbDetails, tmdbImage, tmdbCredits, tmdbExternalIds, tmdbRecommendations, tmdbVideos, tmdbSearchTitle, tmdbTvSeasons, tmdbTvSeasonEpisodes, tmdbSimilar, tmdbImages } from '@/services/tmdb';
+import { apiClient } from '@/services/api';
 import { plexTvAddToWatchlist } from '@/services/plextv';
 import { getTraktTokens, traktAddToWatchlist } from '@/services/trakt';
 import PersonModal from '@/components/PersonModal';
@@ -90,8 +91,13 @@ export default function Details() {
           if (m) {
             setTitle(m.title || m.grandparentTitle || '');
             setOverview(m.summary || '');
-            setBackdrop(plexImage(s.plexBaseUrl!, s.plexToken!, m.art || m.thumb || m.parentThumb || m.grandparentThumb) || backdrop);
-            setPoster(plexImage(s.plexBaseUrl!, s.plexToken!, m.thumb || m.parentThumb || m.grandparentThumb));
+            {
+              const pBackdrop = m.art || m.thumb || m.parentThumb || m.grandparentThumb;
+              const pPoster = m.thumb || m.parentThumb || m.grandparentThumb;
+              const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+              setBackdrop(USE_BACKEND ? apiClient.getPlexImageNoToken(pBackdrop || '') : (plexImage(s.plexBaseUrl!, s.plexToken!, pBackdrop) || backdrop));
+              setPoster(USE_BACKEND ? apiClient.getPlexImageNoToken(pPoster || '') : plexImage(s.plexBaseUrl!, s.plexToken!, pPoster));
+            }
             setKind(m.type === 'movie' ? 'movie' : (m.type === 'show' ? 'tv' : undefined));
             setMeta({
               genres: (m.Genre || []).map((g: any) => g.tag),
@@ -100,7 +106,7 @@ export default function Details() {
             });
             if (m.year) setYear(String(m.year));
             try { setMoodTags(deriveTags((m.Genre||[]).map((g:any)=>g.tag))); } catch {}
-            setCast((m.Role || []).slice(0, 12).map((r: any) => ({ name: r.tag, img: plexImage(s.plexBaseUrl!, s.plexToken!, r.thumb) })));
+            setCast((m.Role || []).slice(0, 12).map((r: any) => ({ name: r.tag, img: ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true) ? apiClient.getPlexImageNoToken(r.thumb || '') : plexImage(s.plexBaseUrl!, s.plexToken!, r.thumb) })));
             // Badges detection
             const bs: string[] = [];
             const media = (m.Media || [])[0];
@@ -386,7 +392,9 @@ export default function Details() {
                   // Replace backdrop with plex art for authenticity and add badges
                   const m = match;
                   setPlexMappedId(`plex:${String(m.ratingKey)}`);
-                  setBackdrop(plexImage(s.plexBaseUrl!, s.plexToken!, m.art || m.thumb || m.parentThumb || m.grandparentThumb) || backdrop);
+                  setBackdrop(((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
+                    ? apiClient.getPlexImageNoToken((m.art || m.thumb || m.parentThumb || m.grandparentThumb) || '')
+                    : plexImage(s.plexBaseUrl!, s.plexToken!, m.art || m.thumb || m.parentThumb || m.grandparentThumb) || backdrop);
                   const extra: string[] = [];
                   const media0 = (m.Media || [])[0];
                   if (media0) {
@@ -430,7 +438,7 @@ export default function Details() {
                     } catch (e) { console.error(e); }
                   }
                   // Prefer cast from Plex if available for better thumbs
-                  if (match.Role && match.Role.length) setCast(match.Role.slice(0,12).map((r: any) => ({ name: r.tag, img: plexImage(s.plexBaseUrl!, s.plexToken!, r.thumb) })));
+                  if (match.Role && match.Role.length) setCast(match.Role.slice(0,12).map((r: any) => ({ name: r.tag, img: ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true) ? apiClient.getPlexImageNoToken(r.thumb || '') : plexImage(s.plexBaseUrl!, s.plexToken!, r.thumb) })));
                   // Trailer from Plex Extras for matched item
                   try {
                     const ex: any = await plexMetadataWithExtras({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, String(m.ratingKey));
@@ -469,7 +477,9 @@ export default function Details() {
             id: `plex:${e.ratingKey}`,
             title: e.title,
             overview: e.summary,
-            image: plexImage(s.plexBaseUrl!, s.plexToken!, e.thumb || e.parentThumb),
+            image: ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
+              ? apiClient.getPlexImageNoToken((e.thumb || e.parentThumb) || '')
+              : plexImage(s.plexBaseUrl!, s.plexToken!, e.thumb || e.parentThumb),
             duration: Math.round((e.duration||0)/60000),
             progress: e.viewOffset ? Math.round(((e.viewOffset/1000)/((e.duration||1)/1000))*100) : 0,
           }));

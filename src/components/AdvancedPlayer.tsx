@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { VideoSeekSlider } from 'react-video-seek-slider';
 import PlexVideoPlayer from './PlexVideoPlayer';
+import { apiClient } from '@/services/api';
 import '../styles/player.css';
 import { Replay10Icon, Forward10Icon } from '@/components/icons/Replay10';
 import {
@@ -855,6 +856,13 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
   const canStreamDirect = metadata ? canDirectStream(metadata) : false;
   const hasDV = metadata ? hasDolbyVision(metadata) : false;
 
+  // Compute poster URL with optional backend proxy
+  const posterUrl = metadata?.thumb
+    ? (((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
+        ? apiClient.getPlexImageNoToken(metadata.thumb)
+        : plexImage(plexConfig.baseUrl, plexConfig.token, metadata.thumb))
+    : undefined;
+
   return (
     <div ref={containerRef} className="fixed inset-0 bg-black z-50" onClick={handleBackdropClick}>
       {streamUrl && (
@@ -862,7 +870,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
           <PlexVideoPlayer
             key={streamUrl} // Force remount when URL changes
             src={streamUrl}
-            poster={metadata?.thumb ? plexImage(plexConfig.baseUrl, plexConfig.token, metadata.thumb) : undefined}
+            poster={posterUrl}
             videoRef={videoRef}
             playing={playing}
             volume={volume}

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { loadSettings } from '@/state/settings';
 import { plexSearch, plexImage, plexLibs, plexSectionAll, plexCollections } from '@/services/plex';
+import { apiClient } from '@/services/api';
 import { plexBackendLibraries, plexBackendSearch } from '@/services/plex_backend';
 import { tmdbSearchMulti, tmdbTrending, tmdbImage, tmdbPopular } from '@/services/tmdb';
 import SearchInput from '@/components/SearchInput';
@@ -118,11 +119,13 @@ export default function Search() {
             const items = cols?.MediaContainer?.Metadata || [];
 
             items.slice(0, 3).forEach((col: any) => {
+              const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+              const p = col.thumb || col.art;
               collectionsList.push({
                 id: `plex:collection:${col.ratingKey}`,
                 title: col.title,
                 type: 'collection',
-                image: plexImage(s.plexBaseUrl!, s.plexToken!, col.thumb || col.art),
+                image: USE_BACKEND ? apiClient.getPlexImageNoToken(p || '') : plexImage(s.plexBaseUrl!, s.plexToken!, p),
                 overview: col.summary
               });
             });
@@ -163,7 +166,9 @@ export default function Search() {
               id: `plex:${item.ratingKey}`,
               title: item.title,
               type: 'movie',
-              image: plexImage(s.plexBaseUrl!, s.plexToken!, item.art || item.thumb || item.parentThumb || item.grandparentThumb),
+              image: ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
+                ? apiClient.getPlexImageNoToken((item.art || item.thumb || item.parentThumb || item.grandparentThumb) || '')
+                : plexImage(s.plexBaseUrl!, s.plexToken!, item.art || item.thumb || item.parentThumb || item.grandparentThumb),
               year: item.year ? String(item.year) : undefined,
               overview: item.summary,
               available: true
@@ -181,7 +186,9 @@ export default function Search() {
               id: `plex:${item.ratingKey}`,
               title: item.title,
               type: 'tv',
-              image: plexImage(s.plexBaseUrl!, s.plexToken!, item.art || item.thumb || item.parentThumb || item.grandparentThumb),
+              image: ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
+                ? apiClient.getPlexImageNoToken((item.art || item.thumb || item.parentThumb || item.grandparentThumb) || '')
+                : plexImage(s.plexBaseUrl!, s.plexToken!, item.art || item.thumb || item.parentThumb || item.grandparentThumb),
               year: item.year ? String(item.year) : undefined,
               overview: item.summary,
               available: true
