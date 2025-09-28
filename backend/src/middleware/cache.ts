@@ -70,7 +70,7 @@ export function plexCache(type: keyof typeof CacheConfig.plex) {
     bucket: 'plex',
     ttl: CacheConfig.plex[type],
     keyGenerator: (req) => {
-      const userId = (req as any).session?.user?.id || 'anonymous';
+      const userId = (req as any).session?.userId || 'anonymous';
       const serverId = req.query.serverId || 'default';
       return `${userId}:${serverId}:${req.path}:${JSON.stringify(req.query)}`;
     },
@@ -98,7 +98,7 @@ export function traktCache(type: keyof typeof CacheConfig.trakt) {
     bucket: 'trakt',
     ttl: CacheConfig.trakt[type],
     keyGenerator: (req) => {
-      const userId = (req as any).session?.user?.id || 'anonymous';
+      const userId = (req as any).session?.userId || 'anonymous';
       return `${userId}:${req.path}:${JSON.stringify(req.query)}`;
     },
     condition: (req) => !req.headers['cache-control']?.includes('no-cache'),

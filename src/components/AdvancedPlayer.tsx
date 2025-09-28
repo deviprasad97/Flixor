@@ -20,6 +20,7 @@ import {
   plexStopTranscodeSession,
   plexKillAllTranscodeSessions,
 } from '@/services/plex_player';
+import { backendStreamUrl, backendUpdateProgress } from '@/services/plex_backend_player';
 import {
   canDirectPlay,
   canDirectStream,
@@ -286,54 +287,55 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
           setTimeout(() => setCodecErrorMessage(null), 5000);
         }
 
-        // Determine stream decision
-        const decision = getStreamDecision(meta, {
-          quality: effectiveQuality,
-          directPlay: effectiveQuality === 'original' && !hasDV,
-          audioStreamId: selectedAudioStream || undefined,
-          subtitleStreamId: selectedSubtitleStream || undefined,
-        });
+        const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
 
-        // Call decision API to see what Plex will actually do
-        const plexDecision = await plexUniversalDecision(plexConfig, itemId, {
-          maxVideoBitrate: effectiveQuality === 'original' ? undefined : Number(effectiveQuality),
-          protocol: 'dash', // Use DASH like Plex Web for better codec support
-          autoAdjustQuality: false,
-          directPlay: decision.directPlay,
-          directStream: decision.directStream,
-          audioStreamID: selectedAudioStream || undefined,
-          subtitleStreamID: selectedSubtitleStream || undefined,
-        });
-
-        // console.log('Initial Plex decision:', plexDecision);
-
-        // Generate stream URL based on actual Plex decision
-        let url: string;
-        if (plexDecision.canDirectPlay && meta.Media?.[0]?.Part?.[0]?.key && !hasDV) {
-          // Direct play URL
-          url = plexDirectPlayUrl(plexConfig, meta.Media[0].Part[0].key);
-          // console.log('Using direct play based on Plex decision');
-        } else {
-          // Transcode URL with actual Plex decision
-          url = plexStreamUrl(plexConfig, itemId, {
-            maxVideoBitrate: effectiveQuality === 'original' ? undefined : Number(effectiveQuality),
-            protocol: 'dash', // Use DASH for better codec support
-            autoAdjustQuality: false,
-            directPlay: false,
-            directStream: plexDecision.willDirectStream || false,
+        if (USE_BACKEND) {
+          // Use backend to generate proxied stream URL (HLS)
+          const qualityNum = (typeof effectiveQuality === 'number') ? effectiveQuality : undefined;
+          const url = await backendStreamUrl(itemId, {
+            quality: qualityNum,
+            resolution: undefined,
             audioStreamID: selectedAudioStream || undefined,
             subtitleStreamID: selectedSubtitleStream || undefined,
           });
-          // console.log('Using stream URL with Plex decision:', {
-          //   quality,
-          //   willDirectStream: plexDecision.willDirectStream,
-          //   willTranscode: plexDecision.willTranscode,
-          // });
-        }
+          setStreamUrl(url);
+        } else {
+          // Determine stream decision
+          const decision = getStreamDecision(meta, {
+            quality: effectiveQuality,
+            directPlay: effectiveQuality === 'original' && !hasDV,
+            audioStreamId: selectedAudioStream || undefined,
+            subtitleStreamId: selectedSubtitleStream || undefined,
+          });
 
-        // console.log('Final stream URL:', url);
-        // console.log('Metadata:', meta);
-        setStreamUrl(url);
+          // Call decision API to see what Plex will actually do
+          const plexDecision = await plexUniversalDecision(plexConfig, itemId, {
+            maxVideoBitrate: effectiveQuality === 'original' ? undefined : Number(effectiveQuality),
+            protocol: 'dash', // Use DASH like Plex Web for better codec support
+            autoAdjustQuality: false,
+            directPlay: decision.directPlay,
+            directStream: decision.directStream,
+            audioStreamID: selectedAudioStream || undefined,
+            subtitleStreamID: selectedSubtitleStream || undefined,
+          });
+
+          // Generate stream URL based on actual Plex decision
+          let url: string;
+          if (plexDecision.canDirectPlay && meta.Media?.[0]?.Part?.[0]?.key && !hasDV) {
+            url = plexDirectPlayUrl(plexConfig, meta.Media[0].Part[0].key);
+          } else {
+            url = plexStreamUrl(plexConfig, itemId, {
+              maxVideoBitrate: effectiveQuality === 'original' ? undefined : Number(effectiveQuality),
+              protocol: 'dash',
+              autoAdjustQuality: false,
+              directPlay: false,
+              directStream: plexDecision.willDirectStream || false,
+              audioStreamID: selectedAudioStream || undefined,
+              subtitleStreamID: selectedSubtitleStream || undefined,
+            });
+          }
+          setStreamUrl(url);
+        }
         
         // Load play queue for episodes
         if (meta.type === 'episode') {
@@ -364,13 +366,18 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
     
     const updateTimeline = () => {
       const state = buffering ? 'buffering' : playing ? 'playing' : 'paused';
-      plexTimelineUpdate(
-        plexConfig,
-        metadata.ratingKey,
-        currentTime * 1000,
-        duration * 1000,
-        state
-      ).catch(console.warn);
+      const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+      if (USE_BACKEND) {
+        backendUpdateProgress(metadata.ratingKey, currentTime * 1000, duration * 1000, state as any).catch(console.warn);
+      } else {
+        plexTimelineUpdate(
+          plexConfig,
+          metadata.ratingKey,
+          currentTime * 1000,
+          duration * 1000,
+          state
+        ).catch(console.warn);
+      }
     };
     
     // Initial update
@@ -482,6 +489,27 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
       // Stop existing transcode session before starting new one
       // console.log('Stopping existing transcode sessions before quality change...');
       await plexKillAllTranscodeSessions(plexConfig);
+
+      // Backend path: generate proxied stream URL server-side
+      const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+      if (USE_BACKEND) {
+        try {
+          const qualityNum = (typeof newQuality === 'number') ? newQuality : undefined;
+          const url = await backendStreamUrl(itemId, {
+            quality: qualityNum,
+            audioStreamID: selectedAudioStream || undefined,
+            subtitleStreamID: selectedSubtitleStream || undefined,
+          });
+          setStreamUrl(url);
+          setTimeout(() => {
+            const video = videoRef.current;
+            if (video && currentPos > 0) video.currentTime = currentPos;
+          }, 250);
+          return;
+        } catch (e) {
+          console.warn('Backend quality change failed, falling back to direct:', e);
+        }
+      }
 
       // Determine stream decision
       const decision = getStreamDecision(metadata, {
@@ -925,8 +953,13 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
             <button
               className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
               onClick={() => {
-                plexTimelineUpdate(plexConfig, metadata!.ratingKey, currentTime * 1000, duration * 1000, 'stopped');
-                onBack?.();
+                const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+                if (USE_BACKEND) {
+                  backendUpdateProgress(metadata!.ratingKey, currentTime * 1000, duration * 1000, 'stopped').finally(() => onBack?.());
+                } else {
+                  plexTimelineUpdate(plexConfig, metadata!.ratingKey, currentTime * 1000, duration * 1000, 'stopped');
+                  onBack?.();
+                }
               }}
             >
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

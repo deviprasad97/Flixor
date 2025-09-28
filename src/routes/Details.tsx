@@ -3,6 +3,7 @@ import Badge from '@/components/Badge';
 import Row from '@/components/Row';
 import { loadSettings } from '@/state/settings';
 import { plexMetadata, plexImage, plexSearch, plexChildren, plexFindByGuid, plexComprehensiveGuidSearch, plexMetadataWithExtras, plexPartUrl } from '@/services/plex';
+import { plexBackendMetadataWithExtras, plexBackendDir, plexBackendSearch } from '@/services/plex_backend';
 import { tmdbDetails, tmdbImage, tmdbCredits, tmdbExternalIds, tmdbRecommendations, tmdbVideos, tmdbSearchTitle, tmdbTvSeasons, tmdbTvSeasonEpisodes, tmdbSimilar, tmdbImages } from '@/services/tmdb';
 import { plexTvAddToWatchlist } from '@/services/plextv';
 import { getTraktTokens, traktAddToWatchlist } from '@/services/trakt';
@@ -70,6 +71,7 @@ export default function Details() {
     // expose setter for trailer mute to toggle function
     (window as any).reactSetTrailerMuted = setTrailerMuted;
     const s = loadSettings();
+    const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
     async function load() {
       if (!id) return;
       try {
@@ -206,7 +208,9 @@ export default function Details() {
             }
             // Try Plex Extras for trailer preview
             try {
-              const ex: any = await plexMetadataWithExtras({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk);
+              const ex: any = USE_BACKEND
+                ? await plexBackendMetadataWithExtras(rk)
+                : await plexMetadataWithExtras({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk);
               const em = ex?.MediaContainer?.Metadata?.[0]?.Extras?.Metadata?.[0];
               const pkey = em?.Media?.[0]?.Part?.[0]?.key as string | undefined;
               if (pkey) {
@@ -217,7 +221,9 @@ export default function Details() {
             // Seasons for Plex-native series
             if (m.type === 'show') {
               try {
-                const ch: any = await plexChildren({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk);
+                const ch: any = USE_BACKEND
+                  ? await plexBackendDir(`/library/metadata/${rk}/children`)
+                  : await plexChildren({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk);
                 const ss = (ch?.MediaContainer?.Metadata||[]).map((x:any)=>({ key:String(x.ratingKey), title:x.title }));
                 setSeasons(ss);
                 if (ss[0]) setSeasonKey(ss[0].key);
@@ -307,18 +313,31 @@ export default function Details() {
 
                 // Use comprehensive search to find items by any of these GUIDs
                 try {
-                  const guidResults: any = await plexComprehensiveGuidSearch(
-                    { baseUrl: s.plexBaseUrl!, token: s.plexToken! },
-                    searchGuids,
-                    media === 'movie' ? 1 : 2
-                  );
-                  allHits = (guidResults?.MediaContainer?.Metadata || []) as any[];
+                  if (USE_BACKEND) {
+                    const t = media === 'movie' ? 1 : 2;
+                    for (const guid of searchGuids) {
+                      try {
+                        const gr: any = await plexBackendDir('/library/all', { guid, type: t });
+                        const hits = (gr?.MediaContainer?.Metadata || []) as any[];
+                        if (hits.length) allHits.push(...hits);
+                      } catch {}
+                    }
+                  } else {
+                    const guidResults: any = await plexComprehensiveGuidSearch(
+                      { baseUrl: s.plexBaseUrl!, token: s.plexToken! },
+                      searchGuids,
+                      media === 'movie' ? 1 : 2
+                    );
+                    allHits = (guidResults?.MediaContainer?.Metadata || []) as any[];
+                  }
                 } catch {}
 
                 // Method 3: Title search as last resort
                 if (allHits.length === 0) {
                   try {
-                    const search: any = await plexSearch({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, q, (media === 'movie' ? 1 : 2));
+                    const search: any = USE_BACKEND
+                      ? await plexBackendSearch(q, media === 'movie' ? 1 : 2)
+                      : await plexSearch({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, q, (media === 'movie' ? 1 : 2));
                     allHits = (search?.MediaContainer?.Metadata || []) as any[];
                   } catch {}
                 }
@@ -443,7 +462,9 @@ export default function Details() {
         setEpisodesLoading(true);
         // Prefer Plex episodes if plex seasonKey is numeric (ratingKey), otherwise use TMDB fallback
         if (/^\d+$/.test(seasonKey) && s.plexBaseUrl && s.plexToken) {
-          const ch: any = await plexChildren({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, seasonKey);
+          const ch: any = ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
+            ? await plexBackendDir(`/library/metadata/${seasonKey}/children`)
+            : await plexChildren({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, seasonKey);
           const eps = (ch?.MediaContainer?.Metadata||[]).map((e:any)=>({
             id: `plex:${e.ratingKey}`,
             title: e.title,

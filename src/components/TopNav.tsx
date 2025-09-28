@@ -37,9 +37,16 @@ export default function TopNav() {
       // Try backend first, then Plex.tv
       const fetchServers = async () => {
         let list: Array<{ name: string; clientIdentifier: string; bestUri: string; token: string }> = [];
+        const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
 
         // Try backend API first
         try {
+          if (USE_BACKEND) {
+            try {
+              // best-effort server sync
+              await apiClient.syncPlexServers(s.plexClientId || 'web');
+            } catch {}
+          }
           const backendServers = await apiClient.getServers();
           if (backendServers && backendServers.length > 0) {
             list = backendServers.map((s: any) => ({
@@ -136,9 +143,15 @@ export default function TopNav() {
     setLoadingServers(true);
     try {
       let list: Array<{ name: string; clientIdentifier: string; bestUri: string; token: string }> = [];
+      const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
 
       // Try backend API first
       try {
+        if (USE_BACKEND) {
+          try {
+            await apiClient.syncPlexServers(loadSettings().plexClientId || 'web');
+          } catch {}
+        }
         const backendServers = await apiClient.getServers();
 
         if (backendServers && backendServers.length > 0) {

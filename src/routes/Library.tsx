@@ -3,6 +3,7 @@ import PosterCard from '@/components/PosterCard';
 import FilterBar from '@/components/FilterBar';
 import { loadSettings } from '@/state/settings';
 import { plexLibs, plexSectionAll, plexImage, withContainer } from '@/services/plex';
+import { plexBackendLibraries, plexBackendLibraryAll } from '@/services/plex_backend';
 import SectionBanner from '@/components/SectionBanner';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
@@ -26,7 +27,8 @@ export default function Library() {
     if (!s.plexBaseUrl || !s.plexToken) { setNeedsPlex(true); return; }
     async function load() {
       try {
-        const libs: any = await plexLibs({ baseUrl: s.plexBaseUrl!, token: s.plexToken! });
+        const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+        const libs: any = USE_BACKEND ? await plexBackendLibraries() : await plexLibs({ baseUrl: s.plexBaseUrl!, token: s.plexToken! });
         const dir = libs?.MediaContainer?.Directory || [];
         const secs = dir
           .filter((d: any) => d.type === 'movie' || d.type === 'show')
@@ -73,10 +75,13 @@ export default function Library() {
     const s = loadSettings();
     if (!active || !s.plexBaseUrl || !s.plexToken) return;
     async function loadItems(reset = true) {
+      const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
       const base = '?sort=addedAt:desc';
       const size = 100;
-      const qs = withContainer(base, reset ? 0 : start, size);
-      const all: any = await plexSectionAll({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, active, qs);
+      const nextOffset = reset ? 0 : start;
+      const all: any = USE_BACKEND
+        ? await plexBackendLibraryAll(active, { sort: 'addedAt:desc', offset: nextOffset, limit: size })
+        : await plexSectionAll({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, active, withContainer(base, nextOffset, size));
       const mc = all?.MediaContainer?.Metadata || [];
       const mapped: Item[] = mc.map((m: any, i: number) => ({
         id: String(m.ratingKey || i),
@@ -127,12 +132,15 @@ export default function Library() {
                 if (!hasMore) return;
                 const s = loadSettings();
                 if (!s.plexBaseUrl || !s.plexToken || !active) return;
-                // load next page
-                (async () => {
+              // load next page
+              (async () => {
+                  const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
                   const base = '?sort=addedAt:desc';
                   const size = 100;
                   const qs = withContainer(base, start, size);
-                  const all: any = await plexSectionAll({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, active, qs);
+                  const all: any = USE_BACKEND
+                    ? await plexBackendLibraryAll(active, { sort: 'addedAt:desc', offset: start, limit: size })
+                    : await plexSectionAll({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, active, qs);
                   const mc = all?.MediaContainer?.Metadata || [];
                   const mapped: Item[] = mc.map((m: any, i: number) => ({
                     id: String(m.ratingKey || i),

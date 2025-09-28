@@ -125,6 +125,9 @@ export default function PlexVideoPlayer({
           debug: {
             logLevel: 1, // 0=none, 1=error, 2=warning, 3=info, 4=debug
           },
+          xhr: {
+            withCredentials: true,
+          },
         });
 
         // Initialize DASH player
@@ -166,6 +169,7 @@ export default function PlexVideoPlayer({
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         // Safari native HLS support
         // console.log('Using native HLS support');
+        try { (video as any).crossOrigin = 'use-credentials'; } catch {}
         video.src = src;
         video.load();
       } else if (Hls.isSupported()) {
@@ -182,8 +186,8 @@ export default function PlexVideoPlayer({
           startLevel: -1, // Auto
           backBufferLength: 30, // Clear back buffer to free memory
           xhrSetup: (xhr: XMLHttpRequest, url: string) => {
-            // Add credentials for CORS
-            xhr.withCredentials = false;
+            // Add credentials for CORS to include session cookie for proxy auth
+            xhr.withCredentials = true;
           },
         });
 
@@ -234,6 +238,7 @@ export default function PlexVideoPlayer({
       } else {
         // Fallback to direct playback
         // console.log('HLS not supported, trying direct playback');
+        try { (video as any).crossOrigin = 'use-credentials'; } catch {}
         video.src = src;
         video.load();
       }

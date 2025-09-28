@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { createLogger } from '../utils/logger';
 import crypto from 'crypto';
+import { encryptForUser, decryptForUser, isEncrypted } from '../utils/crypto';
 
 const router = Router();
 const logger = createLogger('auth');
@@ -30,6 +31,85 @@ function getPlexHeaders(clientId: string, token?: string) {
     headers['X-Plex-Token'] = token;
   }
   return headers;
+}
+
+// Normalize Plex resources to persisted server entries (encrypted tokens)
+async function normalizeAndPersistServers(userId: string, clientId: string): Promise<Array<any>> {
+  const userRepository = AppDataSource.getRepository(User);
+  const settingsRepository = AppDataSource.getRepository(UserSettings);
+
+  const user = await userRepository.findOne({
+    where: { id: userId },
+    select: ['id', 'plexToken'],
+  });
+  if (!user?.plexToken) {
+    throw new Error('Plex account token not found');
+  }
+
+  const accountToken = isEncrypted(user.plexToken)
+    ? decryptForUser(userId, user.plexToken)
+    : user.plexToken;
+
+  const res = await axios.get(
+    `${PLEX_TV_URL}/api/v2/resources?includeHttps=1&includeRelay=1`,
+    { headers: getPlexHeaders(clientId || 'web', accountToken) }
+  );
+
+  const servers = (res.data || [])
+    .filter((r: any) => r.product === 'Plex Media Server')
+    .map((srv: any) => {
+      const connections = Array.isArray(srv.connections) ? srv.connections : [];
+      // Prefer local > remote > relay; prefer https > http
+      const score = (c: any) => (c.local ? 100 : 0) + (!c.relay ? 10 : 0) + (c.protocol === 'https' ? 1 : 0);
+      const best = [...connections].sort((a, b) => score(b) - score(a))[0];
+
+      let host = '';
+      let port = 32400;
+      let protocol: 'http' | 'https' = 'http';
+      if (best?.uri) {
+        try {
+          const u = new URL(best.uri);
+          host = u.hostname;
+          port = Number(u.port || 32400);
+          protocol = (u.protocol.replace(':', '') as 'http' | 'https');
+        } catch {}
+      }
+
+      // Collect addresses
+      const localAddresses = connections
+        .filter((c: any) => c.local && c.address)
+        .map((c: any) => c.address);
+
+      const publicAddress = connections.find((c: any) => !c.local && !c.relay)?.address || undefined;
+
+      return {
+        id: srv.clientIdentifier,
+        name: srv.name,
+        host,
+        port,
+        protocol,
+        owned: !!srv.owned,
+        publicAddress,
+        localAddresses,
+        accessToken: encryptForUser(userId, srv.accessToken),
+      };
+    });
+
+  // Persist to settings
+  let settings = await settingsRepository.findOne({ where: { userId } });
+  if (!settings) {
+    settings = settingsRepository.create({ userId });
+  }
+
+  settings.plexServers = servers;
+  if (!settings.currentServerId && servers[0]) {
+    // Prefer owned server if available
+    const owned = servers.find(s => s.owned) || servers[0];
+    settings.currentServerId = owned.id;
+  }
+
+  await settingsRepository.save(settings);
+  return servers;
 }
 
 // Initialize Plex OAuth
@@ -78,9 +158,9 @@ router.get('/plex/pin/:id', async (req: Request, res: Response, next: NextFuncti
       { headers: getPlexHeaders(clientId as string) }
     );
 
-    if (response.data.authToken) {
-      // PIN has been authenticated
-      const token = response.data.authToken;
+      if (response.data.authToken) {
+        // PIN has been authenticated
+        const token = response.data.authToken;
 
       // Get user info
       const userResponse = await axios.get(
@@ -104,7 +184,7 @@ router.get('/plex/pin/:id', async (req: Request, res: Response, next: NextFuncti
           email: plexUser.email,
           thumb: plexUser.thumb,
           title: plexUser.title,
-          plexToken: token,
+          plexToken: token, // will re-encrypt below after we have user.id
           hasPassword: plexUser.hasPassword || false,
           subscription: plexUser.subscription ? {
             active: plexUser.subscription.active,
@@ -113,6 +193,14 @@ router.get('/plex/pin/:id', async (req: Request, res: Response, next: NextFuncti
           } : undefined,
         });
         user = await userRepository.save(user);
+
+        // Re-encrypt plexToken with userId-derived key
+        try {
+          user.plexToken = encryptForUser(user.id, token);
+          await userRepository.save(user);
+        } catch (e) {
+          logger.warn('Failed to encrypt plexToken, leaving as-is');
+        }
 
         // Create default settings
         const settings = settingsRepository.create({
@@ -131,7 +219,12 @@ router.get('/plex/pin/:id', async (req: Request, res: Response, next: NextFuncti
         user.username = plexUser.username || plexUser.title;
         user.email = plexUser.email;
         user.thumb = plexUser.thumb;
-        user.plexToken = token;
+        // store encrypted token
+        try {
+          user.plexToken = encryptForUser(user.id, token);
+        } catch {
+          user.plexToken = token;
+        }
         user.subscription = plexUser.subscription ? {
           active: plexUser.subscription.active,
           status: plexUser.subscription.status,
@@ -150,6 +243,16 @@ router.get('/plex/pin/:id', async (req: Request, res: Response, next: NextFuncti
       });
 
       logger.info(`User authenticated: ${user.username} (${user.plexId})`);
+
+      // Attempt to sync Plex servers for this user in the background
+      (async () => {
+        try {
+          await normalizeAndPersistServers(user.id, (req.query.clientId as string) || (req.body.clientId as string) || 'web');
+          logger.info('Plex servers synchronized for user', { userId: user.id });
+        } catch (syncErr) {
+          logger.warn('Failed to sync Plex servers after login', { error: (syncErr as Error).message });
+        }
+      })();
 
       res.json({
         authenticated: true,
@@ -239,10 +342,14 @@ router.get('/servers', requireAuth, async (req: AuthenticatedRequest, res: Respo
       throw new AppError('User not found', 404);
     }
 
+    const accountToken = isEncrypted(user.plexToken)
+      ? decryptForUser(req.user!.id, user.plexToken)
+      : user.plexToken;
+
     const response = await axios.get(
       `${PLEX_TV_URL}/api/v2/resources?includeHttps=1&includeRelay=1`,
       {
-        headers: getPlexHeaders(req.body.clientId || 'web', user.plexToken),
+        headers: getPlexHeaders(req.body.clientId || 'web', accountToken),
       }
     );
 
@@ -275,6 +382,18 @@ router.get('/servers', requireAuth, async (req: AuthenticatedRequest, res: Respo
   } catch (error) {
     logger.error('Failed to get Plex servers:', error);
     next(new AppError('Failed to get servers', 500));
+  }
+});
+
+// Persist and return Plex servers for authenticated user
+router.post('/servers/sync', requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const clientId = (req.body?.clientId as string) || 'web';
+    const servers = await normalizeAndPersistServers(req.user!.id, clientId);
+    res.json({ saved: servers.length, servers: servers.map(s => ({ id: s.id, name: s.name })) });
+  } catch (error: any) {
+    logger.error('Failed to sync Plex servers:', error);
+    next(new AppError('Failed to sync servers', 500));
   }
 });
 

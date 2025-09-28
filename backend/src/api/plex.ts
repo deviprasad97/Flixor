@@ -119,13 +119,60 @@ router.get('/library/:id/all',
       const offset = parseInt(req.query.offset as string) || 0;
       const limit = parseInt(req.query.limit as string) || 50;
 
+      // Collect additional query params (e.g., sort, type)
+      const extraParams: Record<string, any> = {};
+      Object.entries(req.query).forEach(([k, v]) => {
+        if (!['offset', 'limit'].includes(k) && v !== undefined) {
+          extraParams[k] = v;
+        }
+      });
+
       const client = await getPlexClient(req.user!.id);
-      const contents = await client.getLibraryContents(id, offset, limit);
+      const contents = await client.getLibraryContents(id, offset, limit, extraParams);
 
       res.json(contents);
     } catch (error: any) {
       logger.error('Failed to get library contents', error);
       next(new AppError(error.message || 'Failed to get library contents', 500));
+    }
+  }
+);
+
+/**
+ * Get secondary directory entries (e.g., genre/year)
+ * GET /api/plex/library/:id/:directory
+ */
+router.get('/library/:id/:directory',
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const { id, directory } = req.params;
+      const client = await getPlexClient(req.user!.id);
+      const mc = await client.getLibrarySecondary(id, directory);
+      res.json(mc);
+    } catch (error: any) {
+      logger.error('Failed to get library secondary', error);
+      next(new AppError(error.message || 'Failed to get library secondary', 500));
+    }
+  }
+);
+
+/**
+ * Generic directory fetch under /library
+ * GET /api/plex/dir/*
+ */
+router.get('/dir/*',
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const path = '/' + (req.params[0] || '').replace(/^\//, '');
+      if (!path.startsWith('/library/')) {
+        throw new AppError('Only /library paths are allowed', 400);
+      }
+      const client = await getPlexClient(req.user!.id);
+      const mc = await client.getDir(path, req.query as any);
+      res.json(mc);
+    } catch (error: any) {
+      logger.error('Failed to fetch directory', error);
+      next(new AppError(error.message || 'Failed to fetch directory', 500));
     }
   }
 );
@@ -140,9 +187,21 @@ router.get('/metadata/:id',
       const { id } = req.params;
 
       const client = await getPlexClient(req.user!.id);
-      const metadata = await client.getMetadata(id);
+      const includeExtras = req.query.includeExtras === '1' || req.query.includeExtras === 'true';
+      const includeExternalMedia = req.query.includeExternalMedia === '1' || req.query.includeExternalMedia === 'true';
+      const includeChildren = req.query.includeChildren === '1' || req.query.includeChildren === 'true';
 
-      res.json(metadata);
+      if (includeExtras || includeExternalMedia || includeChildren) {
+        const metadata = await client.getMetadataWithParams(id, {
+          includeExtras: includeExtras ? 1 : undefined,
+          includeExternalMedia: includeExternalMedia ? 1 : undefined,
+          includeChildren: includeChildren ? 1 : undefined,
+        });
+        res.json(metadata);
+      } else {
+        const metadata = await client.getMetadata(id);
+        res.json(metadata);
+      }
     } catch (error: any) {
       logger.error('Failed to get metadata', error);
       next(new AppError(error.message || 'Failed to get metadata', 500));
@@ -158,13 +217,14 @@ router.get('/search',
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const query = req.query.query as string;
+      const type = req.query.type ? parseInt(req.query.type as string, 10) as 1|2 : undefined;
 
       if (!query) {
         throw new AppError('Query parameter is required', 400);
       }
 
       const client = await getPlexClient(req.user!.id);
-      const results = await client.search(query);
+      const results = typeof type === 'number' ? await client.searchTyped(query, type) : await client.search(query);
 
       res.json(results);
     } catch (error: any) {
@@ -237,24 +297,25 @@ router.get('/recent',
 router.post('/progress',
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const { ratingKey, time, duration } = req.body;
+      const { ratingKey, time, duration, state } = req.body as any;
 
-      if (!ratingKey || time === undefined || !duration) {
+      if (!ratingKey || time === undefined || duration === undefined) {
         throw new AppError('Missing required parameters', 400);
       }
 
       const client = await getPlexClient(req.user!.id);
-      await client.updateProgress(ratingKey, time, duration);
+      await client.updateProgress(String(ratingKey), Number(time), Number(duration), state);
 
       res.json({
         message: 'Progress updated',
         ratingKey,
         time,
-        duration
+        duration,
+        state: state || null,
       });
     } catch (error: any) {
       logger.error('Failed to update progress', error);
-      next(error instanceof AppError ? error : new AppError('Failed to update progress', 500));
+      next(error instanceof AppError ? error : new AppError(error.message || 'Failed to update progress', 500));
     }
   }
 );
@@ -386,7 +447,9 @@ router.get('/proxy/*',
       const serverInfo = client.getServerInfo();
 
       // Build the full URL
-      const url = `${serverInfo.protocol}://${serverInfo.host}:${serverInfo.port}/${path}`;
+      const qs = new URLSearchParams(req.query as any).toString();
+      const base = `${serverInfo.protocol}://${serverInfo.host}:${serverInfo.port}/${path}`;
+      const url = qs ? `${base}?${qs}` : base;
 
       // Add token if not present
       const urlWithToken = url.includes('X-Plex-Token')

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { loadSettings } from '@/state/settings';
 import { plexSearch, plexImage, plexLibs, plexSectionAll, plexCollections } from '@/services/plex';
+import { plexBackendLibraries, plexBackendSearch } from '@/services/plex_backend';
 import { tmdbSearchMulti, tmdbTrending, tmdbImage, tmdbPopular } from '@/services/tmdb';
 import SearchInput from '@/components/SearchInput';
 import SearchResults from '@/components/SearchResults';
@@ -105,7 +106,8 @@ export default function Search() {
     // Load Plex collections
     if (s.plexBaseUrl && s.plexToken) {
       try {
-        const libs: any = await plexLibs({ baseUrl: s.plexBaseUrl, token: s.plexToken });
+        const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+        const libs: any = USE_BACKEND ? await plexBackendLibraries() : await plexLibs({ baseUrl: s.plexBaseUrl, token: s.plexToken });
         const directories = libs?.MediaContainer?.Directory || [];
         const collectionsList: SearchResult[] = [];
 
@@ -150,7 +152,10 @@ export default function Search() {
       if (s.plexBaseUrl && s.plexToken) {
         try {
           // Search movies
-          const plexMovies: any = await plexSearch({ baseUrl: s.plexBaseUrl, token: s.plexToken }, searchQuery, 1);
+          const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+          const plexMovies: any = USE_BACKEND
+            ? await plexBackendSearch(searchQuery, 1)
+            : await plexSearch({ baseUrl: s.plexBaseUrl, token: s.plexToken }, searchQuery, 1);
           const movieResults = plexMovies?.MediaContainer?.Metadata || [];
 
           movieResults.slice(0, 10).forEach((item: any) => {
@@ -166,7 +171,9 @@ export default function Search() {
           });
 
           // Search TV shows
-          const plexShows: any = await plexSearch({ baseUrl: s.plexBaseUrl, token: s.plexToken }, searchQuery, 2);
+          const plexShows: any = USE_BACKEND
+            ? await plexBackendSearch(searchQuery, 2)
+            : await plexSearch({ baseUrl: s.plexBaseUrl, token: s.plexToken }, searchQuery, 2);
           const showResults = plexShows?.MediaContainer?.Metadata || [];
 
           showResults.slice(0, 10).forEach((item: any) => {

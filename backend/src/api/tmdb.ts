@@ -14,7 +14,7 @@ const logger = createLogger('tmdb-api');
  * Get TMDB client for request
  */
 async function getTMDBClient(req: Request): Promise<TMDBClient> {
-  const userId = (req as any).session?.user?.id;
+  const userId = (req as any).session?.userId;
   if (userId) {
     return getUserTMDBClient(userId);
   }

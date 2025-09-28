@@ -6,6 +6,7 @@ import AdvancedPlayer from '@/components/AdvancedPlayer';
 import { loadSettings } from '@/state/settings';
 import { plexImage, plexMetadata } from '@/services/plex';
 import { plexTranscodeMp4Url, plexTranscodeDashUrl, plexTimeline, plexMetadataWithMarkers } from '@/services/plex_stream';
+import { backendStreamUrl, backendUpdateProgress } from '@/services/plex_backend_player';
 import { plexChildren } from '@/services/plex';
 
 export default function Player() {
@@ -64,6 +65,7 @@ export default function Player() {
       if (!id) return;
       const decoded = decodeURIComponent(id);
       let url: string | undefined;
+      const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
       if (decoded.startsWith('plex:')) {
         const s = loadSettings();
         if (s.plexBaseUrl && s.plexToken) {
@@ -94,25 +96,34 @@ export default function Player() {
             if (partId) {
               const resSel = resolution !== 'source' ? resolution : undefined;
               const resBitrate = bitrateForResolution(resSel);
-              if (quality === 'auto') {
-                url = plexTranscodeDashUrl(
-                  { baseUrl: s.plexBaseUrl!, token: s.plexToken! },
-                  String(m.ratingKey),
-                  { autoAdjustQuality: true, maxVideoBitrate: resBitrate, videoResolution: resSel }
-                );
-                setIsDash(true);
-              } else if (quality === 'original' && !resSel) {
-                url = `${s.plexBaseUrl!.replace(/\/$/, '')}/library/parts/${partId}/stream?X-Plex-Token=${s.plexToken}`;
-                setIsDash(false);
-              } else {
+              if (USE_BACKEND) {
                 const qnum = quality !== 'original' ? (Number(quality) || undefined) : undefined;
-                const maxBitrate = qnum ?? resBitrate;
-                url = plexTranscodeMp4Url(
-                  { baseUrl: s.plexBaseUrl!, token: s.plexToken! },
-                  String(m.ratingKey),
-                  { maxVideoBitrate: maxBitrate, videoResolution: resSel }
-                );
-                setIsDash(false);
+                url = await backendStreamUrl(String(m.ratingKey), {
+                  quality: qnum ?? resBitrate,
+                  resolution: resSel,
+                });
+                setIsDash(false); // backend returns HLS; PlexVideoPlayer can handle
+              } else {
+                if (quality === 'auto') {
+                  url = plexTranscodeDashUrl(
+                    { baseUrl: s.plexBaseUrl!, token: s.plexToken! },
+                    String(m.ratingKey),
+                    { autoAdjustQuality: true, maxVideoBitrate: resBitrate, videoResolution: resSel }
+                  );
+                  setIsDash(true);
+                } else if (quality === 'original' && !resSel) {
+                  url = `${s.plexBaseUrl!.replace(/\/$/, '')}/library/parts/${partId}/stream?X-Plex-Token=${s.plexToken}`;
+                  setIsDash(false);
+                } else {
+                  const qnum = quality !== 'original' ? (Number(quality) || undefined) : undefined;
+                  const maxBitrate = qnum ?? resBitrate;
+                  url = plexTranscodeMp4Url(
+                    { baseUrl: s.plexBaseUrl!, token: s.plexToken! },
+                    String(m.ratingKey),
+                    { maxVideoBitrate: maxBitrate, videoResolution: resSel }
+                  );
+                  setIsDash(false);
+                }
               }
             }
 
@@ -142,10 +153,15 @@ export default function Player() {
   // Progress timeline updates for Plex
   useEffect(() => {
     if (!ratingKey) return;
+    const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
     function tick() {
       const s = loadSettings();
       const v = last.current; if (!v) return;
-      plexTimeline({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, ratingKey, v.d*1000, v.t*1000, v.state).catch(()=>{});
+      if (USE_BACKEND) {
+        backendUpdateProgress(ratingKey, v.t*1000, v.d*1000, v.state as any).catch(()=>{});
+      } else {
+        plexTimeline({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, ratingKey, v.d*1000, v.t*1000, v.state).catch(()=>{});
+      }
     }
     timerRef.current = window.setInterval(tick, 10000) as unknown as number;
     return () => { if (timerRef.current) window.clearInterval(timerRef.current); timerRef.current = null; };
@@ -156,7 +172,12 @@ export default function Player() {
     const handler = () => {
       const s = loadSettings();
       const v = last.current; if (!ratingKey || !v) return;
-      plexTimeline({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, ratingKey, v.d*1000, v.t*1000, 'paused').catch(()=>{});
+      const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+      if (USE_BACKEND) {
+        backendUpdateProgress(ratingKey, v.t*1000, v.d*1000, 'paused').catch(()=>{});
+      } else {
+        plexTimeline({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, ratingKey, v.d*1000, v.t*1000, 'paused').catch(()=>{});
+      }
     };
     document.addEventListener('visibilitychange', handler);
     window.addEventListener('beforeunload', handler);

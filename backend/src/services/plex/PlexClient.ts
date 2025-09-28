@@ -3,6 +3,7 @@ import { cacheManager } from '../cache/CacheManager';
 import { createLogger } from '../../utils/logger';
 import { AppDataSource } from '../../db/data-source';
 import { UserSettings } from '../../db/entities';
+import { decryptForUser, isEncrypted } from '../../utils/crypto';
 import crypto from 'crypto';
 
 const logger = createLogger('plex');
@@ -155,10 +156,28 @@ export class PlexClient {
   /**
    * Get library contents
    */
-  async getLibraryContents(libraryKey: string, offset = 0, limit = 50): Promise<PlexMetadata[]> {
+  async getLibraryContents(
+    libraryKey: string,
+    offset = 0,
+    limit = 50,
+    params?: Record<string, any>
+  ): Promise<PlexMetadata[]> {
+    const usp = new URLSearchParams();
+    usp.set('X-Plex-Container-Start', String(offset));
+    usp.set('X-Plex-Container-Size', String(limit));
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && k !== 'offset' && k !== 'limit') usp.set(k, String(v));
+      });
+    }
+
+    const qs = usp.toString();
+    const path = `/library/sections/${libraryKey}/all${qs ? `?${qs}` : ''}`;
+    const cacheKey = `${this.server.id}:library:${libraryKey}:${offset}:${limit}:${JSON.stringify(params||{})}`;
+
     const data = await this.cachedRequest<any>(
-      `/library/sections/${libraryKey}/all?X-Plex-Container-Start=${offset}&X-Plex-Container-Size=${limit}`,
-      `${this.server.id}:library:${libraryKey}:${offset}:${limit}`,
+      path,
+      cacheKey,
       300 // 5 minutes cache
     );
 
@@ -188,6 +207,17 @@ export class PlexClient {
       300 // 5 minutes cache
     );
 
+    return data.MediaContainer.Metadata || [];
+  }
+
+  /**
+   * Search with optional type (1 movie, 2 show)
+   */
+  async searchTyped(query: string, type?: 1 | 2): Promise<PlexMetadata[]> {
+    const params = new URLSearchParams({ query });
+    if (type) params.set('type', String(type));
+    const key = `${this.server.id}:search:${type || 'all'}:${query}`;
+    const data = await this.cachedRequest<any>(`/search?${params.toString()}`, key, 300);
     return data.MediaContainer.Metadata || [];
   }
 
@@ -235,25 +265,77 @@ export class PlexClient {
   }
 
   /**
+   * Get a secondary directory listing for a section (e.g., genre/year)
+   */
+  async getLibrarySecondary(libraryKey: string, directory: string) {
+    const path = `/library/sections/${libraryKey}/${directory}`;
+    const data = await this.cachedRequest<any>(
+      path,
+      `${this.server.id}:secondary:${libraryKey}:${directory}`,
+      3600
+    );
+    return data.MediaContainer;
+  }
+
+  /**
+   * Generic directory/path fetch under /library
+   */
+  async getDir(pathname: string, params?: Record<string, any>) {
+    const safePath = pathname.startsWith('/') ? pathname : `/${pathname}`;
+    if (!safePath.startsWith('/library/')) {
+      throw new Error('Only /library paths are allowed');
+    }
+
+    const usp = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null) usp.set(k, String(v));
+      });
+    }
+    const fullPath = `${safePath}${usp.size ? `?${usp.toString()}` : ''}`;
+    const key = `${this.server.id}:dir:${safePath}:${usp.toString()}`;
+    const data = await this.cachedRequest<any>(fullPath, key, 600);
+    return data.MediaContainer;
+  }
+
+  /**
+   * Get metadata with optional params (includeExtras, includeExternalMedia, includeChildren)
+   */
+  async getMetadataWithParams(ratingKey: string, params?: Record<string, any>) {
+    const usp = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null) usp.set(k, String(v));
+      });
+    }
+    const fullPath = `/library/metadata/${ratingKey}${usp.size ? `?${usp.toString()}` : ''}`;
+    const key = `${this.server.id}:metadata:${ratingKey}:${usp.toString()}`;
+    const data = await this.cachedRequest<any>(fullPath, key, 3600);
+    return data.MediaContainer.Metadata?.[0];
+  }
+
+  /**
    * Update playback progress
    */
-  async updateProgress(ratingKey: string, time: number, duration: number) {
-    const state = time >= duration * 0.9 ? 'stopped' : 'playing';
+  async updateProgress(ratingKey: string, timeMs: number, durationMs: number, stateOverride?: string) {
+    const state = stateOverride || (timeMs >= durationMs * 0.9 ? 'stopped' : 'playing');
 
-    await this.axiosClient.post('/:/timeline', null, {
-      params: {
-        ratingKey,
-        key: `/library/metadata/${ratingKey}`,
-        state,
-        time,
-        duration
-      }
-    });
+    const params: any = {
+      ratingKey,
+      key: `/library/metadata/${ratingKey}`,
+      playbackTime: Math.floor(timeMs),
+      time: Math.floor(timeMs),
+      duration: Math.floor(durationMs),
+      state,
+      context: 'library',
+    };
+
+    await this.axiosClient.get('/:/timeline', { params });
 
     // Invalidate related caches
-    cacheManager.delete('plex', `${this.server.id}:ondeck`);
-    cacheManager.delete('plex', `${this.server.id}:continue`);
-    cacheManager.delete('plex', `${this.server.id}:metadata:${ratingKey}`);
+    cacheManager.del('plex', `${this.server.id}:ondeck`);
+    cacheManager.del('plex', `${this.server.id}:continue`);
+    cacheManager.del('plex', `${this.server.id}:metadata:${ratingKey}`);
   }
 
   /**
@@ -263,9 +345,9 @@ export class PlexClient {
     await this.axiosClient.get(`/:/scrobble?key=${ratingKey}`);
 
     // Invalidate caches
-    cacheManager.delete('plex', `${this.server.id}:metadata:${ratingKey}`);
-    cacheManager.delete('plex', `${this.server.id}:ondeck`);
-    cacheManager.delete('plex', `${this.server.id}:continue`);
+    cacheManager.del('plex', `${this.server.id}:metadata:${ratingKey}`);
+    cacheManager.del('plex', `${this.server.id}:ondeck`);
+    cacheManager.del('plex', `${this.server.id}:continue`);
   }
 
   /**
@@ -275,27 +357,28 @@ export class PlexClient {
     await this.axiosClient.put(`/:/rate?key=${ratingKey}&rating=${rating}`);
 
     // Invalidate cache
-    cacheManager.delete('plex', `${this.server.id}:metadata:${ratingKey}`);
+    cacheManager.del('plex', `${this.server.id}:metadata:${ratingKey}`);
   }
 
   /**
    * Get transcode decision
    */
   async getTranscodeDecision(ratingKey: string, options: any = {}) {
-    const params = {
+    const params: any = {
       hasMDE: 1,
       path: `/library/metadata/${ratingKey}`,
-      mediaIndex: options.mediaIndex || 0,
-      partIndex: options.partIndex || 0,
+      mediaIndex: options.mediaIndex ?? 0,
+      partIndex: options.partIndex ?? 0,
       protocol: 'hls',
       fastSeek: 1,
       directPlay: 0,
       directStream: 1,
-      videoQuality: options.quality || 100,
-      videoResolution: options.resolution || '1920x1080',
       audioBoost: 100,
-      ...options
     };
+    if (options.quality != null) params.maxVideoBitrate = Number(options.quality);
+    if (options.resolution) params.videoResolution = options.resolution;
+    if (options.audioStreamID) params.audioStreamID = options.audioStreamID;
+    if (options.subtitleStreamID) params.subtitleStreamID = options.subtitleStreamID;
 
     const response = await this.axiosClient.post('/video/:/transcode/universal/decision', null, {
       params
@@ -308,14 +391,53 @@ export class PlexClient {
    * Get streaming URL
    */
   async getStreamingUrl(ratingKey: string, options: any = {}): Promise<string> {
-    const decision = await this.getTranscodeDecision(ratingKey, options);
+    // Build a universal start URL (DASH MPD) similar to Plex Web behavior (mirror frontend params)
+    const usp = new URLSearchParams();
+    usp.set('hasMDE', '1');
+    usp.set('path', `/library/metadata/${ratingKey}`);
+    usp.set('mediaIndex', String(options.mediaIndex ?? 0));
+    usp.set('partIndex', String(options.partIndex ?? 0));
+    usp.set('protocol', 'dash');
+    usp.set('fastSeek', '1');
+    usp.set('directPlay', '0');
+    usp.set('directStream', '1');
+    usp.set('directStreamAudio', '1');
+    usp.set('subtitleSize', '100');
+    usp.set('audioBoost', '100');
+    usp.set('manifestSubtitles', '1');
+    // Frontend used autoAdjustQuality=0 unless explicitly enabled
+    usp.set('autoAdjustQuality', options.autoAdjustQuality ? '1' : '0');
+    if (options.quality != null) usp.set('maxVideoBitrate', String(Number(options.quality)));
+    if (options.resolution) usp.set('videoResolution', options.resolution);
+    // Omit audio/subtitle stream selection from the URL like the legacy frontend dash path
+    // Note: We intentionally do not append token; our proxy layer will add it when fetching
+    const sep = usp.toString().length ? '?' : '';
+    const path = `/video/:/transcode/universal/start.mpd${sep}${usp.toString()}`;
+    const urlBase = `${this.axiosClient.defaults.baseURL}${path}`;
 
-    if (decision.MediaContainer?.Metadata?.[0]?.Media?.[0]?.Part?.[0]?.key) {
-      const streamPath = decision.MediaContainer.Metadata[0].Media[0].Part[0].key;
-      return `${this.axiosClient.defaults.baseURL}${streamPath}?X-Plex-Token=${this.server.accessToken}`;
-    }
+    // Append X-Plex headers as query params to mirror frontend behavior
+    const headerParams = new URLSearchParams({
+      'X-Plex-Product': process.env.PLEX_PRODUCT || 'Plex Web',
+      'X-Plex-Version': process.env.PLEX_VERSION || '4.128.1',
+      'X-Plex-Client-Identifier': process.env.PLEX_CLIENT_ID || 'plex-media-backend',
+      'X-Plex-Platform': 'Web',
+      'X-Plex-Platform-Version': process.env.PLEX_PLATFORM_VERSION || '1.0.0',
+      'X-Plex-Device': 'Web',
+      'X-Plex-Device-Name': 'Plex Media Backend',
+      'X-Plex-Device-Screen-Resolution': process.env.PLEX_SCREEN_RES || '1920x1080',
+      'X-Plex-Language': 'en',
+    });
+    // Session identifier
+    const sessionId = `sess_${this.userId}_${ratingKey}_${Date.now()}`;
+    headerParams.set('session', sessionId);
 
-    throw new Error('Unable to generate streaming URL');
+    // Append token last
+    headerParams.set('X-Plex-Token', this.server.accessToken);
+
+    const url = urlBase.includes('?')
+      ? `${urlBase}&${headerParams.toString()}`
+      : `${urlBase}?${headerParams.toString()}`;
+    return url;
   }
 
   /**
@@ -413,7 +535,7 @@ export async function getPlexClient(userId: string, serverId?: string): Promise<
 
   // Use specified server or current server
   const targetServerId = serverId || settings.currentServerId;
-  const server = settings.plexServers.find((s: PlexServer) => s.id === targetServerId);
+  const server = settings.plexServers.find((s: any) => s.id === targetServerId);
 
   if (!server) {
     throw new Error('Server not found');
@@ -422,7 +544,22 @@ export async function getPlexClient(userId: string, serverId?: string): Promise<
   const cacheKey = `${userId}:${server.id}`;
 
   if (!clientMap.has(cacheKey)) {
-    clientMap.set(cacheKey, new PlexClient(server, userId));
+    // Decrypt access token if needed
+    const plainToken = isEncrypted((server as any).accessToken)
+      ? decryptForUser(userId, (server as any).accessToken)
+      : (server as any).accessToken;
+    const normalized = {
+      id: (server as any).id,
+      name: (server as any).name,
+      host: (server as any).host,
+      port: (server as any).port,
+      protocol: (server as any).protocol,
+      accessToken: plainToken,
+      owned: (server as any).owned,
+      publicAddress: (server as any).publicAddress,
+      localAddresses: (server as any).localAddresses,
+    } as any as PlexServer;
+    clientMap.set(cacheKey, new PlexClient(normalized, userId));
   }
 
   return clientMap.get(cacheKey)!;

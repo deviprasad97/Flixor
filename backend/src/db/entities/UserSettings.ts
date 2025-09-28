@@ -8,10 +8,15 @@ export class UserSettings {
 
   @Column({ type: 'json', nullable: true })
   plexServers?: Array<{
+    id: string;
     name: string;
-    clientIdentifier: string;
-    baseUrl: string;
-    token: string;
+    host: string;
+    port: number;
+    protocol: 'http' | 'https';
+    owned: boolean;
+    publicAddress?: string;
+    localAddresses?: string[];
+    accessToken: string; // encrypted
   }>;
 
   @Column({ type: 'varchar', nullable: true })

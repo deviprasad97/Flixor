@@ -48,6 +48,13 @@ class ApiClient {
     return this.request('/auth/servers');
   }
 
+  async syncPlexServers(clientId?: string) {
+    return this.request('/auth/servers/sync', {
+      method: 'POST',
+      body: JSON.stringify({ clientId }),
+    });
+  }
+
   async validateSession() {
     return this.request('/auth/validate');
   }
