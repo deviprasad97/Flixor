@@ -180,7 +180,7 @@ export default function TopNav() {
       <div ref={headerRef} className="relative h-16">
         <div className="nav-bg" />
         <div className="page-gutter h-16 flex items-center gap-8 relative z-10">
-          <Link to="/" className="text-2xl font-extrabold tracking-tight text-brand">NETFLIX</Link>
+          <Link to="/" className="text-2xl font-extrabold tracking-tight text-brand">FLIXOR</Link>
           <nav className="hidden md:flex gap-6 text-sm text-neutral-300">
             {items.map((it) => {
               const base = it.to.split('?')[0];

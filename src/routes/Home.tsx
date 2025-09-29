@@ -92,7 +92,7 @@ export default function Home() {
             title: r.name || r.title,
             image: tmdbImage(r.backdrop_path, 'w780') || tmdbImage(r.poster_path, 'w500'),
           })) || [];
-          rowsData.push({ title: 'Popular on Netflix', items: items.slice(0, 8) });
+          rowsData.push({ title: 'Popular on Plex', items: items.slice(0, 8) });
           rowsData.push({ title: 'Trending Now', items: items.slice(8, 16) });
           // Prepare TMDB fallback hero (do not set yet)
           try {
@@ -134,7 +134,7 @@ export default function Home() {
         } else {
           // Fallback placeholders (no TMDB key)
           const landscape = Array.from({ length: 16 }).map((_, i) => ({ id: 'ph'+i, title: `Sample ${i+1}`, image: `https://picsum.photos/seed/land${i}/800/400` }));
-          rowsData.push({ title: 'Popular on Netflix', items: landscape.slice(0, 8) });
+          rowsData.push({ title: 'Popular on Plex', items: landscape.slice(0, 8) });
           rowsData.push({ title: 'Trending Now', items: landscape.slice(8, 16) });
         }
         // Trakt content will be handled by TraktSection components below

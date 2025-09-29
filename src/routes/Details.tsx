@@ -741,7 +741,7 @@ function toggleMute() {
   } catch (e) { console.error(e); }
 }
 
-// Simple tag derivation from genres to mimic Netflix mood tags
+// Simple tag derivation from genres to mimic FLIXOR mood tags
 function deriveTags(genres: string[]): string[] {
   const g = (genres || []).map(x => x.toLowerCase());
   const tags = new Set<string>();
