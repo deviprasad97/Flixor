@@ -8,7 +8,6 @@ import {
   PlexConfig,
   plexMetadata,
   plexPlayQueue,
-  plexImage,
 } from '@/services/plex';
 import {
   plexStreamUrl,
@@ -467,25 +466,22 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
       // console.log('Stopping existing transcode sessions before quality change...');
       await plexKillAllTranscodeSessions(plexConfig);
 
-      // Backend path: generate proxied stream URL server-side
-      const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
-      if (USE_BACKEND) {
-        try {
-          const qualityNum = (typeof newQuality === 'number') ? newQuality : undefined;
-          const url = await backendStreamUrl(itemId, {
-            quality: qualityNum,
-            audioStreamID: selectedAudioStream || undefined,
-            subtitleStreamID: selectedSubtitleStream || undefined,
-          });
-          setStreamUrl(url);
-          setTimeout(() => {
-            const video = videoRef.current;
-            if (video && currentPos > 0) video.currentTime = currentPos;
-          }, 250);
-          return;
-        } catch (e) {
-          console.warn('Backend quality change failed, falling back to direct:', e);
-        }
+      // Backend path: generate stream URL server-side first, fallback to direct
+      try {
+        const qualityNum = (typeof newQuality === 'number') ? newQuality : undefined;
+        const url = await backendStreamUrl(itemId, {
+          quality: qualityNum,
+          audioStreamID: selectedAudioStream || undefined,
+          subtitleStreamID: selectedSubtitleStream || undefined,
+        });
+        setStreamUrl(url);
+        setTimeout(() => {
+          const video = videoRef.current;
+          if (video && currentPos > 0) video.currentTime = currentPos;
+        }, 250);
+        return;
+      } catch (e) {
+        console.warn('Backend quality change failed, falling back to direct:', e);
       }
 
       // Determine stream decision
@@ -834,9 +830,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
 
   // Compute poster URL with optional backend proxy
   const posterUrl = metadata?.thumb
-    ? (((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
-        ? apiClient.getPlexImageNoToken(metadata.thumb)
-        : plexImage(plexConfig.baseUrl, plexConfig.token, metadata.thumb))
+    ? apiClient.getPlexImageNoToken(metadata.thumb)
     : undefined;
 
   return (
@@ -937,13 +931,12 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
             <button
               className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
               onClick={() => {
-                const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
-                if (USE_BACKEND) {
-                  backendUpdateProgress(metadata!.ratingKey, currentTime * 1000, duration * 1000, 'stopped').finally(() => onBack?.());
-                } else {
-                  plexTimelineUpdate(plexConfig, metadata!.ratingKey, currentTime * 1000, duration * 1000, 'stopped');
-                  onBack?.();
-                }
+                backendUpdateProgress(metadata!.ratingKey, currentTime * 1000, duration * 1000, 'stopped')
+                  .catch(() => {
+                    // Best-effort fallback to direct timeline if backend call fails
+                    try { plexTimelineUpdate(plexConfig, metadata!.ratingKey, currentTime * 1000, duration * 1000, 'stopped'); } catch {}
+                  })
+                  .finally(() => onBack?.());
               }}
             >
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

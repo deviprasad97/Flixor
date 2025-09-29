@@ -37,8 +37,6 @@ const router = createBrowserRouter([
 if (typeof window !== 'undefined') {
   // eslint-disable-next-line no-console
   console.info('[App] MODE:', (import.meta as any).env?.MODE);
-  // eslint-disable-next-line no-console
-  console.info('[App] VITE_USE_BACKEND_PLEX =', (import.meta as any).env?.VITE_USE_BACKEND_PLEX);
 }
 
 createRoot(document.getElementById('root')!).render(

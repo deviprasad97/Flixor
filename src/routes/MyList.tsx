@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { plexTvWatchlist, plexTvRemoveFromWatchlist } from '@/services/plextv';
 import { traktGetWatchlist, traktAddToWatchlist, traktRemoveFromWatchlist, isTraktAuthenticated, getTraktTokens } from '@/services/trakt';
 import { tmdbDetails, tmdbImage } from '@/services/tmdb';
-import { plexImage } from '@/services/plex';
 import { apiClient } from '@/services/api';
 import WatchlistButton from '@/components/WatchlistButton';
 import { loadSettings } from '@/state/settings';
@@ -31,8 +30,6 @@ export default function MyList() {
   const navigate = useNavigate();
   const settings = loadSettings();
   const tmdbKey = settings.tmdbBearer || '';
-  const plexToken = settings.plexToken || '';
-  const plexBaseUrl = settings.plexBaseUrl || '';
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<WatchlistItem[]>([]);
@@ -95,9 +92,7 @@ export default function MyList() {
           id: item.ratingKey ? `plex:${item.ratingKey}` : (tmdbId ? `tmdb:${item.type==='movie'?'movie':'tv'}:${tmdbId}` : `plex-${item.guid}`),
           title: item.title,
           year: item.year?.toString(),
-          image: item.thumb ? (((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
-            ? apiClient.getPlexImageNoToken(item.thumb)
-            : plexImage(plexBaseUrl, plexToken, item.thumb)) : undefined,
+          image: item.thumb ? apiClient.getPlexImageNoToken(item.thumb) : undefined,
           overview: item.summary,
           rating: item.contentRating || (item.rating ? `⭐ ${item.rating}` : undefined),
           mediaType: item.type === 'movie' ? 'movie' : 'show',

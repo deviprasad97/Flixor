@@ -3,7 +3,7 @@ import axios from 'axios';
 import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
-import { cacheManager } from '../services/cache/CacheManager';
+import { cacheManager, CacheManager } from '../services/cache/CacheManager';
 import { createLogger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
@@ -55,7 +55,7 @@ router.get('/proxy', async (req: Request, res: Response, next: NextFunction) => 
     const options = parseImageOptions(req.query);
 
     // Generate cache key based on URL and options
-    const cacheKey = cacheManager.constructor.generateHashKey(
+    const cacheKey = CacheManager.generateHashKey(
       JSON.stringify({ url: imageUrl, ...options })
     );
     const cacheDir = path.join(process.cwd(), 'cache', 'images');
@@ -183,7 +183,7 @@ router.get('/plex', requireAuth, async (req: AuthenticatedRequest, res: Response
     const options = parseImageOptions(req.query);
 
     // Generate cache key
-    const cacheKey = cacheManager.constructor.generateHashKey(JSON.stringify({ url: fullUrl, ...options }));
+    const cacheKey = CacheManager.generateHashKey(JSON.stringify({ url: fullUrl, ...options }));
     const cacheDir = path.join(process.cwd(), 'cache', 'images', 'plex');
     const cachePath = path.join(cacheDir, `${cacheKey}.${options.format}`);
 

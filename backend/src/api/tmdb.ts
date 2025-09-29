@@ -543,7 +543,7 @@ router.delete('/key',
       const settings = await settingsRepo.findOne({ where: { userId } });
 
       if (settings) {
-        settings.tmdbApiKey = null;
+        settings.tmdbApiKey = undefined;
         await settingsRepo.save(settings);
       }
 

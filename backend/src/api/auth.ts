@@ -104,7 +104,7 @@ async function normalizeAndPersistServers(userId: string, clientId: string): Pro
   settings.plexServers = servers;
   if (!settings.currentServerId && servers[0]) {
     // Prefer owned server if available
-    const owned = servers.find(s => s.owned) || servers[0];
+    const owned = servers.find((s: any) => s.owned) || servers[0];
     settings.currentServerId = owned.id;
   }
 

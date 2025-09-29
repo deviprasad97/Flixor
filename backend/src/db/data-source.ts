@@ -40,10 +40,35 @@ export async function initializeDatabase(): Promise<DataSource> {
 
     console.log(`✅ Database initialized at: ${databasePath}`);
 
-    // Run migrations in production
-    if (process.env.NODE_ENV === 'production') {
-      await AppDataSource.runMigrations();
-      console.log('✅ Migrations completed');
+    // Run migrations in non-test environments (dev + prod)
+    try {
+      const env = process.env.NODE_ENV || 'development';
+      if (env !== 'test') {
+        await AppDataSource.runMigrations();
+        console.log(`✅ Migrations completed (env=${env})`);
+      }
+    } catch (e) {
+      console.warn('⚠️  Migration run skipped or failed:', e);
+    }
+
+    // Bootstrap fallback: if no core tables exist and there are no migrations,
+    // perform a one-time synchronize to create the schema.
+    try {
+      const tables: Array<{ name: string }> = await AppDataSource.query(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users','user_settings','sessions','cache_entries')"
+      );
+      const hasCoreTables = Array.isArray(tables) && tables.length > 0;
+
+      const migrationsDir = path.join(__dirname, 'migrations');
+      const hasMigrationsOnDisk = fs.existsSync(migrationsDir) && fs.readdirSync(migrationsDir).length > 0;
+
+      if (!hasCoreTables && !hasMigrationsOnDisk) {
+        console.log('ℹ️  No DB tables and no migrations found; running one-time synchronize to bootstrap schema');
+        await AppDataSource.synchronize();
+        console.log('✅ Schema synchronized (bootstrap)');
+      }
+    } catch (e) {
+      console.warn('⚠️  Bootstrap schema check/sync failed:', e);
     }
 
     return AppDataSource;

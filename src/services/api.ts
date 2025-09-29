@@ -1,6 +1,18 @@
 // Backend API client
-const API_BASE = 'http://localhost:3001/api';
-const BACKEND_BASE = 'http://localhost:3001';
+// Determine API base:
+// - If VITE_API_BASE is set, use it (e.g., http://api.example.com/api or /api)
+// - If running Vite dev (port 5173), default to http://localhost:3001/api
+// - Otherwise default to same-origin '/api' (behind reverse proxy)
+const defaultApiBase = (() => {
+  try {
+    const loc = window.location;
+    if (loc && loc.port === '5173') return 'http://localhost:3001/api';
+  } catch {}
+  return '/api';
+})();
+
+const API_BASE: string = (import.meta as any).env?.VITE_API_BASE || defaultApiBase;
+const BACKEND_BASE: string = API_BASE.replace(/\/?api\/?$/, '');
 
 class ApiClient {
   private async request(path: string, options?: RequestInit) {

@@ -1,13 +1,13 @@
 # Backend Migration – Status, Gaps, and Next Phases
 
-This document captures what we have migrated from a frontend‑only app to our backend, what is intentionally still handled on the frontend, and the concrete plan for the next phases. It reflects the current repo state (flag‑gated migration) and supersedes older integration notes for accuracy.
+This document captures what we have migrated from a frontend‑only app to our backend, what is intentionally still handled on the frontend, and the concrete plan for the next phases. It reflects the current repo state and supersedes older integration notes for accuracy.
 
 ## Summary
 
 - Backend (Express + TypeORM + SQLite + Cache) is running and provides TMDB proxy, Plex auth/session, Plex library/search/metadata APIs, image proxy, and progress updates.
-- Frontend has a feature flag to switch Plex reads and player progress to the backend while keeping streaming behavior identical to the previous frontend (direct DASH URL with X‑Plex params + token).
+- Frontend delegates all Plex reads to the backend. The only direct calls to Plex from the browser are player streaming requests (by design, identical to commit 147b572).
 
-Flag for dev: `VITE_USE_BACKEND_PLEX=true` (now set by default in `.env`).
+Note: The frontend now uses the backend for Plex reads by default. The old `VITE_USE_BACKEND_PLEX` flag has been removed/ignored and can be deleted from `.env`.
 
 ## What’s Done (Backend + Frontend)
 
@@ -25,9 +25,9 @@ Flag for dev: `VITE_USE_BACKEND_PLEX=true` (now set by default in `.env`).
   - Sensitive token storage encrypted at rest.
 - Plex APIs (reads)
   - Servers (list/set current), libraries, library contents (with pagination/filters), search (typed), metadata (+extras/external/children), on deck, continue watching, recent, directory proxy for library paths.
-- Player integration (partial)
-  - Streaming URL: Backend returns a DASH `.mpd` universal start URL that mirrors the legacy frontend URL shape (protocol=dash, directStream=1, manifestSubtitles=1, X‑Plex‑* headers as query params, X‑Plex‑Token appended). Frontend uses this direct URL; no backend proxy in the playback path.
-  - Progress updates: Frontend posts to `/api/plex/progress` (maps to Plex `/:/timeline` with correct params and ms units). Cache invalidation fixed (uses `cacheManager.del`).
+- Player integration
+  - Streaming (unchanged from 147b572): The browser builds the Plex decision and stream URL client‑side using the same X‑Plex headers + profile and calls Plex directly for `decision` and `start.mpd/m3u8`. This preserves exact behavior and quality switching.
+  - Progress updates: The browser posts to `/api/plex/progress` (backend relays to Plex `/:/timeline`) to keep session logic and cache invalidation server‑side.
 
 ## What’s Intentionally Parked (still frontend or not migrated yet)
 
@@ -40,14 +40,16 @@ Flag for dev: `VITE_USE_BACKEND_PLEX=true` (now set by default in `.env`).
   - TMDB images: remain direct (allowed). Backend image proxy exists but not universally used.
   - Plex images: still built as `baseUrl + path + X‑Plex‑Token` on the client in many places; can be migrated to `/api/image/plex`.
 - Residual direct Plex calls in some views
-  - Most reads now use backend under the flag; remaining edge calls (e.g., play queue or certain details flows) can be swapped to backend helpers as needed.
-  - Aggregated lists (e.g., New & Popular’s cross‑library recently added/popular) still use frontend helpers that fan out to Plex; consider backend aggregator endpoints later.
+  - None for reads. All reads (libraries, metadata/extras/children, directories, search, GUID mapping, collections) go through backend now.
+  - Aggregated lists (e.g., New & Popular’s recently added/popular) still call backend‑wrapped reads under the hood. We can add explicit aggregator endpoints later if needed.
 
-## Current Dev Toggle
+## Frontend Backend Usage
 
-- `VITE_USE_BACKEND_PLEX` (true/false)
-  - true: Frontend uses backend for Plex reads and player progress; playback URL is fetched from backend but points directly to Plex (same shape as legacy frontend).
-  - false: Frontend uses previous direct Plex reads and direct player URLs.
+- Plex reads are backend‑only by default across Home/Library/Search/Details.
+- Player
+  - Streaming: The frontend requests a stream URL via the backend, which returns a direct Plex URL (decision + `start.mpd/m3u8`). The player then loads that URL directly.
+  - Progress: Player reports progress via backend (`/api/plex/progress`).
+  - We no longer gate this behind `VITE_USE_BACKEND_PLEX`.
 
 ## Risks / Notes
 
@@ -58,20 +60,39 @@ Flag for dev: `VITE_USE_BACKEND_PLEX=true` (now set by default in `.env`).
 - Progress updates
   - Now go through backend; align all timeline calls to that path for consistency.
 
+## Database & Migrations (dev vs prod)
+
+- DB location and creation
+  - Default path: `backend/config/db/app.sqlite`.
+  - Override via `CONFIG_DIRECTORY` (directory) or `DATABASE_PATH` (full file path).
+  - The backend creates the directory and file on startup if missing, and enables WAL + foreign keys.
+- Development (`npm run dev:all`)
+  - `dev:all` runs `vite` and the backend watcher concurrently.
+  - On backend start, the DB is initialized and migrations are run automatically by the server (no CLI needed). `synchronize` remains enabled in dev as a safety net until migrations exist for all entities.
+- Production
+  - In production, `synchronize` is disabled and migrations are run automatically at startup (`runMigrations`).
+  - First-run bootstrap: if no core tables are found and no migrations are present on disk, the server performs a one-time `synchronize()` to create the schema. This enables out-of-the-box Docker deploys before formal migrations are added.
+- Running migrations manually in development
+  - Generate: `cd backend && npm run migration:generate -- src/db/migrations/<Name>`
+  - Run: `cd backend && npm run migration:run`
+  - Revert last: `cd backend && npm run migration:revert`
+- Optional: force migrations on every dev start
+  - Update the backend dev script to run migrations before starting the watcher, e.g. `"dev": "npm run migration:run && tsx watch src/server.ts"`.
+  - If you adopt this, consider turning off `synchronize` in development to keep schema changes migration‑driven.
+
 ## Next Phase – Plan of Action
 
 Phase 2 wrap (stabilization)
-- Validate all read endpoints under `VITE_USE_BACKEND_PLEX=true` across Home/Library/Search/Details.
+- Validate all read endpoints now that backend is the default path across Home/Library/Search/Details.
 - Audit remaining direct Plex reads and swap to backend equivalents where missing.
 
-De-stale pass (completed)
-- Frontend now delegates GUID lookups, libraries, directories, metadata (when flagged) through backend.
+De‑stale pass (completed)
+- Frontend now delegates GUID lookups, libraries, directories, metadata, extras, children, collections, and search through backend.
 - Removed stale/duplicated client helpers:
   - Deleted: `src/services/plex_player.ts`, `src/services/plex_stream.ts`, `src/services/plextv_auth.ts`.
-  - Consolidated player helpers into `src/services/plex.ts` (decision, stream URL, timeline, stop transcode, image transcode, part URL).
-  - Updated components to use consolidated helpers:
-    - AdvancedPlayer and Player now import from `src/services/plex.ts` (and backend variants where applicable).
-    - Settings and TopNav use backend auth/server routes (`apiClient`) instead of direct Plex.tv helpers.
+  - Consolidated playback helpers into `src/services/plex.ts` (decision, stream URL, timeline, stop transcode, image transcode, part URL) while keeping behavior identical to 147b572.
+  - Updated components to use backend services: Home, Library, Search, Details, BrowseModal, TraktSection, ContinueCard, LandscapeCard, and Player (metadata/progress).
+  - Settings and TopNav use backend auth/server routes (`apiClient`) instead of direct Plex.tv helpers.
 
 Phase 3 – Player hardening
 - Progress + Scrobble
@@ -83,8 +104,8 @@ Phase 4 – Image proxy adoption (security + caching)
 - Keep TMDB direct unless optimization is needed.
 
 What still intentionally calls Plex directly (for now)
-- Playback: the streaming URL returned by backend points to Plex (`start.mpd`/`start.m3u8`/direct part). This matches legacy behavior and avoids proxy complexity.
-- Plex Discover (watchlist) remains via `src/services/plextv.ts` (web-only); can be migrated later.
+- Playback (exactly as 147b572): Player requests `decision` and `start.mpd/m3u8` directly from Plex. This preserves quality selection/original behavior.
+- Convenience links in Details (direct part stream; open in Plex) remain direct by design.
 
 Done – Plex Discover watchlist via backend
 - Added backend routes under `/api/plextv` to proxy Plex Discover:
@@ -92,6 +113,17 @@ Done – Plex Discover watchlist via backend
   - `PUT /api/plextv/watchlist/:id`
   - `DELETE /api/plextv/watchlist/:id`
 - Frontend `src/services/plextv.ts` now uses these endpoints with cookies; no tokens are sent from the browser.
+
+Done – Plex collections via backend
+- Added backend route: `GET /api/plex/library/:id/collections`
+- Frontend switched to `plexBackendCollections(sectionKey)` for Search collections UI.
+
+Reliability – Plex connection fallback (backend)
+- Backend PlexClient now retries across candidates when a connection times out or fails:
+  - Tries configured `protocol://host:port`, public address, and local addresses across https/http.
+  - Switches to the first working base URL for subsequent calls.
+  - In development, TLS is relaxed for plex.direct/self‑signed certificates (to avoid dev‑only failures).
+  - This eliminates 30s timeouts on `/api/plex/metadata/:id` seen when a single advertised URI is unreachable.
 
 Phase 5 – Optional: Proxy‑based streaming (tokenless)
 - Design
@@ -113,6 +145,7 @@ Phase 6 – Security & QoL
 - Cache: `backend/src/services/cache/CacheManager.ts`
 - TMDB proxy: `backend/src/api/tmdb.ts`, `backend/src/services/tmdb/TMDBClient.ts`
 - Plex APIs: `backend/src/api/plex.ts`, `backend/src/services/plex/PlexClient.ts`
+- Plex Discover proxy: `backend/src/api/plextv.ts`
 - Auth/PIN: `backend/src/api/auth.ts`
 - Image proxy: `backend/src/api/image-proxy.ts`
 - Frontend backend clients: `src/services/plex_backend.ts`, `src/services/plex_backend_player.ts`
@@ -127,3 +160,11 @@ Phase 6 – Security & QoL
 - Player
   - Streaming URL: `GET /api/plex/stream/:ratingKey` (returns direct DASH URL)
   - Progress: `POST /api/plex/progress` with `{ ratingKey, time, duration, state }`
+
+Plex Discover Watchlist
+- `GET http://localhost:3001/api/plextv/watchlist`
+- `PUT http://localhost:3001/api/plextv/watchlist/:id`
+- `DELETE http://localhost:3001/api/plextv/watchlist/:id`
+
+Collections
+- `GET http://localhost:3001/api/plex/library/:id/collections`

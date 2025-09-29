@@ -37,6 +37,15 @@ async function startServer() {
     const app: Express = express();
     const PORT = parseInt(process.env.PORT || '3001', 10);
     const HOST = process.env.HOST || '0.0.0.0';
+    const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrlObj = new URL(FRONTEND_URL);
+    const isHttpsFrontend = frontendUrlObj.protocol === 'https:';
+    const cookieSameSiteEnv = (process.env.SESSION_SAMESITE || '').toLowerCase();
+    const cookieSecureEnv = (process.env.SESSION_SECURE || '').toLowerCase();
+    const cookieSameSite = (cookieSameSiteEnv === 'lax' || cookieSameSiteEnv === 'strict' || cookieSameSiteEnv === 'none')
+      ? cookieSameSiteEnv
+      : (isHttpsFrontend ? 'none' : 'lax');
+    const cookieSecure = cookieSecureEnv === 'true' ? true : cookieSecureEnv === 'false' ? false : isHttpsFrontend;
 
     // Trust proxy (for secure cookies behind reverse proxy)
     app.set('trust proxy', 1);
@@ -51,7 +60,7 @@ async function startServer() {
 
     // CORS configuration
     app.use(cors({
-      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+      origin: FRONTEND_URL,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
       allowedHeaders: [
@@ -84,10 +93,10 @@ async function startServer() {
         ttl: 86400, // 1 day in seconds
       }).connect(sessionRepository),
       cookie: {
-        secure: process.env.NODE_ENV === 'production',
+        secure: cookieSecure,
         httpOnly: true,
         maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+        sameSite: cookieSameSite as any,
       },
       name: 'plex.sid',
     }));
