@@ -42,4 +42,3 @@ export default function PersonModal({ open, onClose, personId, name, tmdbKey }: 
     </div>
   );
 }
-

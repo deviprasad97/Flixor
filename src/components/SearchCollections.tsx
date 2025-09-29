@@ -1,3 +1,5 @@
+import SmartImage from './SmartImage';
+
 interface CollectionItem {
   id: string;
   title: string;
@@ -87,12 +89,7 @@ export default function SearchCollections({ collections, onItemClick }: SearchCo
                 <div className="relative aspect-[16/9] rounded-xl overflow-hidden bg-gray-800 ring-1 ring-white/10">
                   {collection.image ? (
                     <>
-                      <img
-                        src={collection.image}
-                        alt={collection.title}
-                        className="w-full h-full object-cover transform transition-transform duration-300 group-hover:scale-[1.03]"
-                        loading="lazy"
-                      />
+                      <SmartImage url={collection.image} alt={collection.title} width={320} className="w-full h-full" imgClassName="object-cover transform transition-transform duration-300 group-hover:scale-[1.03]" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-90 group-hover:opacity-100 transition-opacity duration-300" />
                     </>
                   ) : (
@@ -123,7 +120,7 @@ export default function SearchCollections({ collections, onItemClick }: SearchCo
               <div className="relative aspect-[16/9] rounded-xl overflow-hidden bg-gradient-to-br from-gray-700 to-gray-800 ring-1 ring-white/10 flex items-center justify-center transform transition-transform duration-300 group-hover:scale-[1.04]">
                 <div className="text-center">
                   <svg className="w-10 h-10 text-white mb-2 mx-auto" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/>
+                    <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4H4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/>
                   </svg>
                   <p className="text-white font-medium text-sm">All Collections</p>
                 </div>

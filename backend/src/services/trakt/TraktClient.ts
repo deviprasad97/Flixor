@@ -130,6 +130,20 @@ export class TraktClient {
     return res.data;
   }
 
+  // Charts: Most Watched over a period (public)
+  async mostWatched(type: 'movies'|'shows', period: 'daily'|'weekly'|'monthly'|'yearly'|'all' = 'weekly', limit?: number) {
+    const url = `/${type}/watched/${period}${limit ? `?limit=${limit}` : ''}`;
+    const res = await this.axios.get(url);
+    return res.data;
+  }
+
+  // Anticipated (public)
+  async anticipated(type: 'movies'|'shows', limit?: number) {
+    const url = `/${type}/anticipated${limit ? `?limit=${limit}` : ''}`;
+    const res = await this.axios.get(url);
+    return res.data;
+  }
+
   // Authenticated endpoints
   async recommendations(type: 'movies'|'shows', limit?: number) {
     const url = `/recommendations/${type}${limit ? `?limit=${limit}` : ''}`;

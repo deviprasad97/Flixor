@@ -11,7 +11,6 @@ const items = [
   { to: '/library?tab=movies', label: 'Movies' },
   { to: '/new-popular', label: 'New & Popular' },
   { to: '/my-list', label: 'My List' },
-  { to: '/library?tab=langs', label: 'Browse by Languages' },
 ];
 
 export default function TopNav() {
@@ -196,7 +195,6 @@ export default function TopNav() {
             <Link to="/search" className="hover:text-white transition-colors">
               <IconSearch />
             </Link>
-            <span className="hidden md:block text-xs">Kids</span>
             <IconBell />
             {/* Server switcher */}
             <div className="relative hidden md:block">

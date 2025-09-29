@@ -6,6 +6,7 @@ import { plexBackendDir } from '@/services/plex_backend';
 import { apiClient } from '@/services/api';
 import { plexTvWatchlist } from '@/services/plextv';
 import { tmdbRecommendations, tmdbSimilar, tmdbImage } from '@/services/tmdb';
+import SmartImage from './SmartImage';
 
 type Item = { id: string; title: string; image?: string };
 
@@ -118,7 +119,7 @@ export default function BrowseModal() {
                 {items.map((i, idx) => (
                   <button key={idx} className="text-left group" onClick={() => nav(`/details/${encodeURIComponent(i.id)}`)}>
                     <div className="w-full aspect-video rounded-xl overflow-hidden ring-1 ring-white/10 bg-neutral-800 card-hover">
-                      {i.image && <img src={i.image} className="w-full h-full object-cover" />}
+                      {i.image && <SmartImage url={i.image} alt={i.title} width={320} className="w-full h-full" imgClassName="object-cover" />}
                     </div>
                     <div className="mt-1 text-sm line-clamp-2 text-neutral-200 group-hover:text-white transition-colors">{i.title}</div>
                   </button>

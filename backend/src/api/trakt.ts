@@ -26,6 +26,41 @@ router.get('/:type(trending|popular)/:media(movies|shows)', async (req: Request,
   }
 });
 
+// Charts: most watched (public)
+router.get('/:media(movies|shows)/watched/:period(daily|weekly|monthly|yearly|all)', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const media = req.params.media as 'movies'|'shows';
+    const period = req.params.period as 'daily'|'weekly'|'monthly'|'yearly'|'all';
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const key = `trakt:watched:${media}:${period}:${limit||'all'}`;
+    const data = await cacheManager.getOrSet('trakt', key, async () => {
+      const c = new TraktClient();
+      return c.mostWatched(media, period, limit);
+    }, 30 * 60); // 30 minutes
+    res.json(data);
+  } catch (e: any) {
+    logger.error('Trakt most-watched failed', e);
+    next(new AppError('Failed to fetch Trakt charts', 500));
+  }
+});
+
+// Anticipated (public)
+router.get('/:media(movies|shows)/anticipated', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const media = req.params.media as 'movies'|'shows';
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const key = `trakt:anticipated:${media}:${limit||'all'}`;
+    const data = await cacheManager.getOrSet('trakt', key, async () => {
+      const c = new TraktClient();
+      return c.anticipated(media, limit);
+    }, 30 * 60);
+    res.json(data);
+  } catch (e: any) {
+    logger.error('Trakt anticipated failed', e);
+    next(new AppError('Failed to fetch Trakt anticipated', 500));
+  }
+});
+
 // Device code (auth not strictly required, but we require session to save tokens later)
 router.post('/oauth/device/code', requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {

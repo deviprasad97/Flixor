@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import SmartImage from './SmartImage';
 
 type HomeHeroProps = {
   title: string;
@@ -79,14 +80,9 @@ export default function HomeHero({
         <div className="absolute inset-0">
           {/* Backdrop image */}
           {backdropUrl && (
-            <img
-              src={backdropUrl}
-              alt=""
-              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${
-                imageLoaded && !playing ? 'opacity-100' : 'opacity-0'
-              }`}
-              onLoad={() => setImageLoaded(true)}
-            />
+            <div className={`absolute inset-0 transition-opacity duration-1000 ${imageLoaded && !playing ? 'opacity-100' : 'opacity-0'}`}>
+              <SmartImage url={backdropUrl} alt="" width={1280} className="w-full h-full" imgClassName="object-cover" priority />
+            </div>
           )}
 
           {/* Trailer overlay */}

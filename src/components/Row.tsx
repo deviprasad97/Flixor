@@ -48,7 +48,6 @@ export default function Row({ title, items, variant = 'default', onItemClick, br
           </div>
           <div className={((gutter === 'row' || gutter === 'edge') ? 'row-edge' : 'row-edge-plain') + ' no-scrollbar overflow-x-auto py-3 md:py-4'}>
             <div className="flex gap-6 md:gap-8 pb-2 md:pb-4 w-max">
-              
               {uniqueItems.map((i) => variant === 'continue' ? (
                 <ContinueCard key={i.id} id={i.id} title={i.title} image={i.image!} progress={i.progress ?? 0} onClick={(id) => onItemClick?.(id)} />
               ) : (

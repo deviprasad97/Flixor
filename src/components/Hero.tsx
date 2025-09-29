@@ -1,9 +1,13 @@
+import SmartImage from './SmartImage';
+
 type HeroProps = { title: string; overview?: string; backdropUrl?: string; cta?: React.ReactNode };
 export default function Hero({ title, overview, backdropUrl, cta }: HeroProps) {
   return (
     <div className="relative w-full h-[50vh] md:h-[60vh] overflow-hidden">
       {backdropUrl ? (
-        <img src={backdropUrl} className="absolute inset-0 w-full h-full object-cover object-center" alt="backdrop" />
+        <div className="absolute inset-0">
+          <SmartImage url={backdropUrl} alt="backdrop" width={1280} className="w-full h-full" imgClassName="object-cover object-center" priority />
+        </div>
       ) : (
         <div className="absolute inset-0 bg-neutral-900" />
       )}
@@ -16,4 +20,3 @@ export default function Hero({ title, overview, backdropUrl, cta }: HeroProps) {
     </div>
   );
 }
-

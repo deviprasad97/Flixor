@@ -128,6 +128,10 @@ export default function Library() {
           <div className="row-band">
             <VirtualGrid
               items={filtered}
+              columnWidth={160}
+              rowHeight={240}
+              gap={12}
+              overscan={3}
               hasMore={hasMore}
               loadMore={() => {
                 if (!hasMore) return;
@@ -156,7 +160,7 @@ export default function Library() {
                   setHasMore(newStart < total);
                 })();
               }}
-              render={(it) => <div className="p-2"><PosterCard title={it.title} image={it.image} onClick={() => nav(`/details/plex:${it.id}`)} /></div>}
+              render={(it) => <PosterCard title={it.title} image={it.image} onClick={() => nav(`/details/plex:${it.id}`)} />}
             />
           </div>
         </div>

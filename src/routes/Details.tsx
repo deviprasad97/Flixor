@@ -9,6 +9,7 @@ import { apiClient } from '@/services/api';
 import { plexTvAddToWatchlist } from '@/services/plextv';
 import { getTraktTokens, traktAddToWatchlist } from '@/services/trakt';
 import PersonModal from '@/components/PersonModal';
+import SmartImage from '@/components/SmartImage';
 import { useEffect, useState } from 'react';
 import DetailsHero from '@/components/DetailsHero';
 import DetailsTabs from '@/components/DetailsTabs';
@@ -675,7 +676,7 @@ export default function Details() {
                     >
                       <div className="aspect-square rounded-lg overflow-hidden bg-white/10 mb-2">
                         {c.img ? (
-                          <img src={c.img} className="w-full h-full object-cover" />
+                          <SmartImage url={c.img} alt={c.name} width={120} className="w-full h-full" imgClassName="object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-white/20">
                             <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 24 24">

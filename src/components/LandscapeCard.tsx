@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { loadSettings } from '@/state/settings';
+import SmartImage from './SmartImage';
 import { tmdbBestBackdropUrl } from '@/services/tmdb';
 import { plexMetadata, plexFindByGuid } from '@/services/plex';
 import { plexBackendMetadata } from '@/services/plex_backend';
@@ -83,7 +84,9 @@ export default function LandscapeCard({ id, title, image, badge, onClick, layout
   return (
     <div className={wrapperClass} onClick={() => onClick?.(id)}>
       <div className={`relative ${aspectClass} card card-hover ring-1 ring-white/15 hover:ring-2 hover:ring-white/90 hover:ring-offset-2 hover:ring-offset-transparent transition-all duration-200 group-hover:z-20`}>
-        <img src={src} alt={title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+                <div className="w-full h-full">
+                  <SmartImage url={src} alt={title} width={360} className="w-full h-full" imgClassName="transition-transform duration-300 group-hover:scale-[1.03]" />
+                </div>
         {/* Top-left badge */}
         {badge && <span className="absolute top-2 left-2 text-xs bg-black/70 text-white px-2 py-0.5 rounded">{badge}</span>}
         {/* Hover overlay actions */}

@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import SmartImage from './SmartImage';
 
 export type Episode = {
   id: string;
@@ -18,7 +19,7 @@ export default function EpisodeItem({ ep, onClick }: { ep: Episode; onClick?: (i
       <div className="flex gap-4 items-start py-2">
         <div className="w-8 text-right pt-1 text-neutral-400 tabular-nums">{ep.index ?? ''}</div>
         <div className="relative w-44 h-24 rounded-xl overflow-hidden ring-1 ring-white/10 bg-neutral-800">
-          {ep.image ? <img src={ep.image} className="w-full h-full object-cover" /> : null}
+          {ep.image ? <SmartImage url={ep.image} alt={ep.title} width={160} className="w-full h-full" imgClassName="object-cover" /> : null}
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors" />
           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
             <div className="px-3 py-1.5 rounded-full bg-white text-black text-sm font-medium">Play</div>
@@ -37,4 +38,3 @@ export default function EpisodeItem({ ep, onClick }: { ep: Episode; onClick?: (i
     </button>
   );
 }
-
