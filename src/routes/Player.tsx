@@ -6,7 +6,7 @@ import AdvancedPlayer from '@/components/AdvancedPlayer';
 import { loadSettings } from '@/state/settings';
 import { plexImage, plexMetadata } from '@/services/plex';
 import { apiClient } from '@/services/api';
-import { plexTranscodeMp4Url, plexTranscodeDashUrl, plexTimeline, plexMetadataWithMarkers } from '@/services/plex_stream';
+import { plexStreamUrl, plexTimelineUpdate, plexMetadataWithExtras, plexPartUrl } from '@/services/plex';
 import { backendStreamUrl, backendUpdateProgress } from '@/services/plex_backend_player';
 import { plexChildren } from '@/services/plex';
 
@@ -66,29 +66,22 @@ export default function Player() {
       if (!id) return;
       const decoded = decodeURIComponent(id);
       let url: string | undefined;
-      const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
       if (decoded.startsWith('plex:')) {
         const s = loadSettings();
         if (s.plexBaseUrl && s.plexToken) {
           const rk = decoded.replace(/^plex:/, '');
           try {
-            const meta: any = USE_BACKEND
-              ? await (await import('@/services/plex_backend')).plexBackendMetadata(rk)
-              : await plexMetadata({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk);
+            const meta: any = await (await import('@/services/plex_backend')).plexBackendMetadata(rk);
             const m = meta?.MediaContainer?.Metadata?.[0];
             if (m) {
               setTitle(m.title || m.grandparentTitle || '');
               const p = m.thumb || m.parentThumb || m.grandparentThumb;
-              const img = ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
-                ? apiClient.getPlexImageNoToken(p || '')
-                : plexImage(s.plexBaseUrl!, s.plexToken!, p);
+              const img = apiClient.getPlexImageNoToken(p || '');
               setPoster(img);
               setRatingKey(String(m.ratingKey));
               // Fetch markers (intro, credits)
               try {
-                const mark: any = USE_BACKEND
-                  ? await (await import('@/services/plex_backend')).plexBackendMetadataWithExtras(String(m.ratingKey))
-                  : await plexMetadataWithMarkers({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, String(m.ratingKey));
+                const mark: any = await (await import('@/services/plex_backend')).plexBackendMetadataWithExtras(String(m.ratingKey));
                 const mm = mark?.MediaContainer?.Metadata?.[0];
                 const list = (mm?.Marker || []).map((mk: any) => ({ type: String(mk.type||''), start: (mk.start||0)/1000, end: (mk.end||0)/1000 }));
                 setMarkers(list);
@@ -96,50 +89,27 @@ export default function Player() {
             }
             const v = qs.get('v');
             let partId: string | undefined;
-            if (v) {
-              const media = (m?.Media||[]).find((me:any)=> String(me.id||me.Id)===v);
-              partId = media?.Part?.[0]?.id ? String(media.Part[0].id) : undefined;
-            } else {
-              partId = m?.Media?.[0]?.Part?.[0]?.id ? String(m.Media[0].Part[0].id) : undefined;
-            }
-            if (partId) {
-              const resSel = resolution !== 'source' ? resolution : undefined;
-              const resBitrate = bitrateForResolution(resSel);
-              if (USE_BACKEND) {
+              if (v) {
+                const media = (m?.Media||[]).find((me:any)=> String(me.id||me.Id)===v);
+                partId = media?.Part?.[0]?.id ? String(media.Part[0].id) : undefined;
+              } else {
+                partId = m?.Media?.[0]?.Part?.[0]?.id ? String(m.Media[0].Part[0].id) : undefined;
+              }
+              if (partId) {
+                const resSel = resolution !== 'source' ? resolution : undefined;
+                const resBitrate = bitrateForResolution(resSel);
                 const qnum = quality !== 'original' ? (Number(quality) || undefined) : undefined;
                 url = await backendStreamUrl(String(m.ratingKey), {
                   quality: qnum ?? resBitrate,
                   resolution: resSel,
                 });
-                setIsDash(false); // backend returns HLS; PlexVideoPlayer can handle
-              } else {
-                if (quality === 'auto') {
-                  url = plexTranscodeDashUrl(
-                    { baseUrl: s.plexBaseUrl!, token: s.plexToken! },
-                    String(m.ratingKey),
-                    { autoAdjustQuality: true, maxVideoBitrate: resBitrate, videoResolution: resSel }
-                  );
-                  setIsDash(true);
-                } else if (quality === 'original' && !resSel) {
-                  url = `${s.plexBaseUrl!.replace(/\/$/, '')}/library/parts/${partId}/stream?X-Plex-Token=${s.plexToken}`;
-                  setIsDash(false);
-                } else {
-                  const qnum = quality !== 'original' ? (Number(quality) || undefined) : undefined;
-                  const maxBitrate = qnum ?? resBitrate;
-                  url = plexTranscodeMp4Url(
-                    { baseUrl: s.plexBaseUrl!, token: s.plexToken! },
-                    String(m.ratingKey),
-                    { maxVideoBitrate: maxBitrate, videoResolution: resSel }
-                  );
-                  setIsDash(false);
-                }
+                setIsDash(false);
               }
-            }
 
             // Compute next episode prompt if current is an episode
             if (m?.type === 'episode' && m.parentRatingKey) {
               try {
-                const kids: any = await plexChildren({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, String(m.parentRatingKey));
+                const kids: any = await (await import('@/services/plex_backend')).plexBackendDir(`/library/metadata/${String(m.parentRatingKey)}/children`);
                 const list = (kids?.MediaContainer?.Metadata || []) as any[];
                 // Sort by 'index' ascending
                 list.sort((a:any,b:any)=> (a.index||0)-(b.index||0));
@@ -162,15 +132,9 @@ export default function Player() {
   // Progress timeline updates for Plex
   useEffect(() => {
     if (!ratingKey) return;
-    const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
     function tick() {
-      const s = loadSettings();
       const v = last.current; if (!v) return;
-      if (USE_BACKEND) {
-        backendUpdateProgress(ratingKey, v.t*1000, v.d*1000, v.state as any).catch(()=>{});
-      } else {
-        plexTimeline({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, ratingKey, v.d*1000, v.t*1000, v.state).catch(()=>{});
-      }
+      backendUpdateProgress(ratingKey, v.t*1000, v.d*1000, v.state as any).catch(()=>{});
     }
     timerRef.current = window.setInterval(tick, 10000) as unknown as number;
     return () => { if (timerRef.current) window.clearInterval(timerRef.current); timerRef.current = null; };
@@ -179,14 +143,8 @@ export default function Player() {
   // Extra timeline on visibilitychange/unload
   useEffect(() => {
     const handler = () => {
-      const s = loadSettings();
       const v = last.current; if (!ratingKey || !v) return;
-      const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
-      if (USE_BACKEND) {
-        backendUpdateProgress(ratingKey, v.t*1000, v.d*1000, 'paused').catch(()=>{});
-      } else {
-        plexTimeline({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, ratingKey, v.d*1000, v.t*1000, 'paused').catch(()=>{});
-      }
+      backendUpdateProgress(ratingKey, v.t*1000, v.d*1000, 'paused').catch(()=>{});
     };
     document.addEventListener('visibilitychange', handler);
     window.addEventListener('beforeunload', handler);
@@ -243,9 +201,8 @@ export default function Player() {
           dash={isDash}
           onProgress={(t, d, state) => { last.current = { t, d, state }; setCurrentTime(Math.floor(t)); setDuration(Math.floor(d)); }}
           onBack={() => {
-            const s = loadSettings();
             if (ratingKey && last.current) {
-              plexTimeline({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, ratingKey, (last.current.d||0)*1000, (last.current.t||0)*1000, 'paused').finally(()=> nav(-1));
+              backendUpdateProgress(ratingKey, (last.current?.t||0)*1000, (last.current?.d||0)*1000, 'paused').finally(()=> nav(-1));
             } else { nav(-1); }
           }}
           nextLabel={next?.title}

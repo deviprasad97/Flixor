@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { loadSettings } from '@/state/settings';
-import { plexDir, plexImage } from '@/services/plex';
+import { plexImage } from '@/services/plex';
+import { plexBackendDir } from '@/services/plex_backend';
 import { apiClient } from '@/services/api';
 import { plexTvWatchlist } from '@/services/plextv';
 import { tmdbRecommendations, tmdbSimilar, tmdbImage } from '@/services/tmdb';
@@ -57,18 +58,16 @@ export default function BrowseModal() {
           setTmdbCtx({ kind: kind === 'recs' ? 'recs' : 'similar', media, id: tmdbId, page: 1, total: res?.total_pages || undefined });
           return;
         }
-        if (!s.plexBaseUrl || !s.plexToken) throw new Error('Plex not configured');
-        const res: any = await plexDir({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, bkey);
+        const res: any = await plexBackendDir(bkey);
         const mc = res?.MediaContainer;
         setTitle([mc?.title1, mc?.title2].filter(Boolean).join(' - ') || 'Browse');
         const meta = mc?.Metadata || [];
         const rows: Item[] = meta.map((m: any) => {
-          const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
           const p = m.thumb || m.parentThumb || m.grandparentThumb || m.art;
           return {
             id: `plex:${m.ratingKey}`,
             title: m.title || m.grandparentTitle || 'Title',
-            image: USE_BACKEND ? apiClient.getPlexImageNoToken(p || '') : plexImage(s.plexBaseUrl!, s.plexToken!, p),
+            image: apiClient.getPlexImageNoToken(p || ''),
           };
         });
         setItems(rows);

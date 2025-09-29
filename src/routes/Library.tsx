@@ -28,8 +28,7 @@ export default function Library() {
     if (!s.plexBaseUrl || !s.plexToken) { setNeedsPlex(true); return; }
     async function load() {
       try {
-        const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
-        const libs: any = USE_BACKEND ? await plexBackendLibraries() : await plexLibs({ baseUrl: s.plexBaseUrl!, token: s.plexToken! });
+        const libs: any = await plexBackendLibraries();
         const dir = libs?.MediaContainer?.Directory || [];
         const secs = dir
           .filter((d: any) => d.type === 'movie' || d.type === 'show')
@@ -76,18 +75,14 @@ export default function Library() {
     const s = loadSettings();
     if (!active || !s.plexBaseUrl || !s.plexToken) return;
     async function loadItems(reset = true) {
-      const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
       const base = '?sort=addedAt:desc';
       const size = 100;
       const nextOffset = reset ? 0 : start;
-      const all: any = USE_BACKEND
-        ? await plexBackendLibraryAll(active, { sort: 'addedAt:desc', offset: nextOffset, limit: size })
-        : await plexSectionAll({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, active, withContainer(base, nextOffset, size));
+      const all: any = await plexBackendLibraryAll(active, { sort: 'addedAt:desc', offset: nextOffset, limit: size });
       const mc = all?.MediaContainer?.Metadata || [];
       const mapped: Item[] = mc.map((m: any, i: number) => {
-        const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
         const p = m.thumb || m.parentThumb || m.grandparentThumb;
-        const img = USE_BACKEND ? apiClient.getPlexImageNoToken(p || '') : plexImage(s.plexBaseUrl!, s.plexToken!, p);
+        const img = apiClient.getPlexImageNoToken(p || '');
         return {
           id: String(m.ratingKey || i),
           title: m.title || m.grandparentTitle,
@@ -140,18 +135,13 @@ export default function Library() {
                 if (!s.plexBaseUrl || !s.plexToken || !active) return;
               // load next page
               (async () => {
-                  const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
                   const base = '?sort=addedAt:desc';
                   const size = 100;
-                  const qs = withContainer(base, start, size);
-                  const all: any = USE_BACKEND
-                    ? await plexBackendLibraryAll(active, { sort: 'addedAt:desc', offset: start, limit: size })
-                    : await plexSectionAll({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, active, qs);
+                  const all: any = await plexBackendLibraryAll(active, { sort: 'addedAt:desc', offset: start, limit: size });
                   const mc = all?.MediaContainer?.Metadata || [];
                   const mapped: Item[] = mc.map((m: any, i: number) => {
-                    const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
                     const p = m.thumb || m.parentThumb || m.grandparentThumb;
-                    const img = USE_BACKEND ? apiClient.getPlexImageNoToken(p || '') : plexImage(s.plexBaseUrl!, s.plexToken!, p);
+                    const img = apiClient.getPlexImageNoToken(p || '');
                     return {
                       id: String(m.ratingKey || i),
                       title: m.title || m.grandparentTitle,

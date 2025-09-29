@@ -164,155 +164,235 @@ export async function plexComprehensiveGuidSearch(cfg: PlexConfig, guids: string
 }
 
 export async function plexFindByGuid(cfg: PlexConfig, guid: string, typeNum?: 1|2) {
-  // If backend flag is enabled, delegate to backend to avoid direct plex.direct calls
-  const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
-  if (USE_BACKEND) {
-    return plexBackendFindByGuid(guid, typeNum);
-  }
-
-  // Legacy direct mode
-  return cached(`plex:${encodeURIComponent(cfg.baseUrl)}:guid:${guid}:${typeNum ?? 0}`, 30 * 60 * 1000, async () => {
-    // First try global search
-    try {
-      const globalUrl = `${cfg.baseUrl}/library/all?guid=${encodeURIComponent(guid)}${typeNum ? `&type=${typeNum}` : ''}&X-Plex-Token=${cfg.token}`;
-      const res = await fetch(globalUrl, { headers: { Accept: 'application/json' } });
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.MediaContainer?.Metadata?.length > 0) {
-          return data;
-        }
-      }
-    } catch {}
-
-    // If global search fails, search each library section
-    try {
-      const libsRes = await fetch(`${cfg.baseUrl}/library/sections?X-Plex-Token=${cfg.token}`, { headers: { Accept: 'application/json' } });
-      if (!libsRes.ok) throw new Error(`Failed to get library sections`);
-      const libs = await libsRes.json();
-      const sections = libs?.MediaContainer?.Directory || [];
-
-      // Filter sections by type if specified
-      const targetSections = typeNum
-        ? sections.filter((s: any) => (typeNum === 1 && s.type === 'movie') || (typeNum === 2 && s.type === 'show'))
-        : sections;
-
-      // Search each section
-      for (const section of targetSections) {
-        try {
-          const sectionUrl = `${cfg.baseUrl}/library/sections/${section.key}/all?guid=${encodeURIComponent(guid)}&X-Plex-Token=${cfg.token}`;
-          const sectionRes = await fetch(sectionUrl, { headers: { Accept: 'application/json' } });
-          if (sectionRes.ok) {
-            const sectionData = await sectionRes.json();
-            if (sectionData?.MediaContainer?.Metadata?.length > 0) {
-              return sectionData;
-            }
-          }
-        } catch {}
-      }
-    } catch {}
-
-    // Return empty result if nothing found
-    return { MediaContainer: { Metadata: [] } };
-  });
+  return plexBackendFindByGuid(guid, typeNum);
 }
 
 // Player-specific Plex API methods
-export async function plexUniversalDecision(cfg: PlexConfig, itemId: string, options?: {
-  maxVideoBitrate?: number;
-  autoAdjustQuality?: boolean;
-  videoResolution?: string;
-  directPlay?: boolean;
-  directStream?: boolean;
-}) {
-  const params = new URLSearchParams({
-    hasMDE: '1',
-    path: `/library/metadata/${itemId}`,
-    mediaIndex: '0',
-    partIndex: '0',
-    protocol: 'dash',
-    fastSeek: '1',
-    directPlay: options?.directPlay !== false ? '1' : '0',
-    directStream: options?.directStream !== false ? '1' : '0',
-    subtitleSize: '100',
-    audioBoost: '100',
-    session: Math.random().toString(36).substring(2, 15), // Add session ID
-    'X-Plex-Client-Identifier': 'plex-mpv-client-web', // Add client identifier
-    'X-Plex-Token': cfg.token,
-  });
+// ---- Begin exact player helpers (from 147b572) ----
 
-  if (options?.maxVideoBitrate) {
-    params.set('maxVideoBitrate', options.maxVideoBitrate.toString());
-  }
-  if (options?.autoAdjustQuality !== undefined) {
-    params.set('autoAdjustQuality', options.autoAdjustQuality ? '1' : '0');
-  } else {
-    params.set('autoAdjustQuality', '0'); // Default to 0
-  }
-  if (options?.videoResolution) {
-    params.set('videoResolution', options.videoResolution);
-  }
-
-  const url = `${cfg.baseUrl}/video/:/transcode/universal/decision?${params}`;
-  const res = await fetch(url, { 
-    method: 'GET', // Use GET instead of HEAD
-    headers: {
-      'Accept': 'application/json',
-      'X-Plex-Client-Identifier': 'plex-mpv-client-web',
+function getClientId(): string {
+  try {
+    let clientId = localStorage.getItem('plex_client_id');
+    if (!clientId) {
+      clientId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('plex_client_id', clientId);
     }
-  });
-  if (!res.ok) throw new Error(`Plex decision error ${res.status}`);
-  return res;
+    return clientId;
+  } catch {
+    return Math.random().toString(36).substring(2, 15);
+  }
 }
 
-export function plexStreamUrl(cfg: PlexConfig, itemId: string, options?: {
+function getSessionId(): string {
+  try {
+    let sessionId = sessionStorage.getItem('plex_session_id');
+    if (!sessionId) {
+      sessionId = Math.random().toString(36).substring(2, 15);
+      sessionStorage.setItem('plex_session_id', sessionId);
+    }
+    return sessionId;
+  } catch {
+    return Math.random().toString(36).substring(2, 15);
+  }
+}
+
+function getBrowserName(): string {
+  const userAgent = navigator.userAgent;
+  if (userAgent.includes('Chrome')) return 'Chrome';
+  if (userAgent.includes('Safari')) return 'Safari';
+  if (userAgent.includes('Firefox')) return 'Firefox';
+  if (userAgent.includes('Opera')) return 'Opera';
+  return 'Unknown';
+}
+
+function getClientProfile(): string {
+  const profiles = [] as string[];
+  profiles.push('add-limitation(scope=videoCodec&scopeName=hevc&type=upperBound&name=video.width&value=4096&replace=true)');
+  profiles.push('add-limitation(scope=videoCodec&scopeName=hevc&type=upperBound&name=video.height&value=2160&replace=true)');
+  profiles.push('add-limitation(scope=videoCodec&scopeName=hevc&type=upperBound&name=video.bitDepth&value=10&replace=true)');
+  profiles.push('append-transcode-target-codec(type=videoProfile&context=streaming&protocol=dash&videoCodec=h264)');
+  profiles.push('append-transcode-target-codec(type=videoProfile&context=streaming&protocol=hls&videoCodec=h264)');
+  profiles.push('append-transcode-target-codec(type=videoProfile&context=streaming&videoCodec=h264,hevc&audioCodec=aac&protocol=dash)');
+  profiles.push('add-limitation(scope=videoTranscodeTarget&scopeName=hevc&scopeType=videoCodec&context=streaming&protocol=dash&type=match&name=video.colorTrc&list=bt709|bt470m|bt470bg|smpte170m|smpte240m|bt2020-10|smpte2084&isRequired=false)');
+  return profiles.join('+');
+}
+
+export function getXPlexHeaders(token: string) {
+  return {
+    'X-Plex-Product': 'Plex MPV Client',
+    'X-Plex-Version': '1.0.0',
+    'X-Plex-Client-Identifier': getClientId(),
+    'X-Plex-Platform': 'Web',
+    'X-Plex-Platform-Version': getBrowserName(),
+    'X-Plex-Features': 'external-media,indirect-media,hub-style-list',
+    'X-Plex-Model': 'bundled',
+    'X-Plex-Device': getBrowserName(),
+    'X-Plex-Device-Name': 'Plex MPV Web',
+    'X-Plex-Device-Screen-Resolution': `${window.screen.width}x${window.screen.height}`,
+    'X-Plex-Token': token,
+    'X-Plex-Language': 'en',
+    'X-Plex-Session-Id': getSessionId(),
+    'X-Plex-Session-Identifier': getSessionId(),
+    'X-Plex-Client-Profile-Extra': getClientProfile(),
+  } as Record<string, string>;
+}
+
+export function getStreamProps(itemId: string, options?: {
   maxVideoBitrate?: number;
+  autoAdjustQuality?: boolean;
   protocol?: 'dash' | 'hls';
   directPlay?: boolean;
   directStream?: boolean;
-  session?: string;
+  audioStreamID?: string;
+  subtitleStreamID?: string;
+  subtitleMode?: 'burn' | 'embed' | 'none';
 }) {
-  const sessionId = options?.session || Math.random().toString(36).substring(2, 15);
-  const params = new URLSearchParams({
-    hasMDE: '1',
+  const sessionId = getSessionId();
+  const props: any = {
+    hasMDE: 1,
     path: `/library/metadata/${itemId}`,
-    mediaIndex: '0',
-    partIndex: '0',
-    protocol: options?.protocol || 'dash',
-    fastSeek: '1',
-    directPlay: options?.directPlay !== false ? '1' : '0',
-    directStream: options?.directStream !== false ? '1' : '0',
-    subtitleSize: '100',
-    audioBoost: '100',
-    location: 'wan',
-    addDebugOverlay: '0',
-    autoAdjustQuality: '0',
+    mediaIndex: 0,
+    partIndex: 0,
+    protocol: options?.protocol || 'hls',
+    fastSeek: 1,
+    directPlay: options?.directPlay === true ? 1 : 0,
+    directStream: options?.directStream === true ? 1 : 0,
+    directStreamAudio: 0,
+    subtitleSize: 100,
+    audioBoost: 100,
+    location: 'lan',
+    addDebugOverlay: 0,
+    autoAdjustQuality: options?.autoAdjustQuality ? 1 : 0,
+    mediaBufferSize: 102400,
+    'Accept-Language': 'en',
     session: sessionId,
-    'X-Plex-Client-Identifier': 'plex-mpv-client-web',
-    'X-Plex-Token': cfg.token,
-  });
-
-  if (options?.maxVideoBitrate) {
-    params.set('maxVideoBitrate', options.maxVideoBitrate.toString());
+    'X-Plex-Incomplete-Segments': 1,
+  };
+  if (options?.subtitleStreamID !== undefined) {
+    if (options.subtitleStreamID === '0' || options.subtitleStreamID === '-1') {
+      props.subtitles = 'none';
+    } else {
+      props.subtitleStreamID = options.subtitleStreamID;
+      props.subtitles = options.subtitleMode || 'burn';
+    }
+  } else {
+    props.subtitles = 'burn';
   }
+  if (options?.audioStreamID) props.audioStreamID = options.audioStreamID;
+  if (options?.maxVideoBitrate !== undefined && options.maxVideoBitrate > 0) {
+    props.maxVideoBitrate = options.maxVideoBitrate;
+  }
+  return props;
+}
 
+export async function plexUniversalDecision(cfg: PlexConfig, itemId: string, options?: {
+  maxVideoBitrate?: number;
+  autoAdjustQuality?: boolean;
+  protocol?: 'dash' | 'hls';
+  directPlay?: boolean;
+  directStream?: boolean;
+  audioStreamID?: string;
+  subtitleStreamID?: string;
+}) {
+  const props = getStreamProps(itemId, { ...options, protocol: options?.protocol || 'hls' });
+  const headers = getXPlexHeaders(cfg.token);
+  const params = new URLSearchParams();
+  Object.entries(props).forEach(([k, v]) => params.set(k, String(v)));
+  Object.entries(headers).forEach(([k, v]) => params.set(k, String(v)));
+  const url = `${cfg.baseUrl}/video/:/transcode/universal/decision?${params}`;
+  try {
+    const response = await fetch(url, { method: 'GET', headers: { 'Accept': 'application/json', 'X-Plex-Token': cfg.token } });
+    const data = await response.json();
+    const c = data.MediaContainer;
+    const decision = {
+      directPlayDecisionCode: c.directPlayDecisionCode,
+      directPlayDecisionText: c.directPlayDecisionText,
+      transcodeDecisionCode: c.transcodeDecisionCode,
+      transcodeDecisionText: c.transcodeDecisionText,
+      generalDecisionCode: c.generalDecisionCode,
+      generalDecisionText: c.generalDecisionText,
+      videoDecision: c.Metadata?.[0]?.Media?.[0]?.Part?.[0]?.Stream?.[0]?.decision,
+      audioDecision: c.Metadata?.[0]?.Media?.[0]?.Part?.[0]?.Stream?.[1]?.decision,
+    } as any;
+    decision.canDirectPlay = decision.directPlayDecisionCode === 1000;
+    decision.willTranscode = decision.videoDecision === 'transcode';
+    decision.willDirectStream = decision.videoDecision === 'copy';
+    decision.streamUrl = c.Metadata?.[0]?.Media?.[0]?.Part?.[0]?.key;
+    return decision;
+  } catch (e) {
+    console.error('Failed to get Plex decision:', e);
+    return { canDirectPlay: false, willTranscode: true, willDirectStream: false } as any;
+  }
+}
+
+export function plexStreamUrl(cfg: PlexConfig, itemId: string, options?: { maxVideoBitrate?: number; protocol?: 'dash'|'hls'; autoAdjustQuality?: boolean; directPlay?: boolean; directStream?: boolean; audioStreamID?: string; subtitleStreamID?: string; forceReload?: boolean; }) {
+  const props = getStreamProps(itemId, { ...options, protocol: options?.protocol || 'hls' });
+  const headers = getXPlexHeaders(cfg.token);
+  const params = new URLSearchParams();
+  Object.entries(props).forEach(([k, v]) => params.set(k, String(v)));
+  Object.entries(headers).forEach(([k, v]) => params.set(k, String(v)));
+  if (options?.forceReload) params.set('_t', Date.now().toString());
   const ext = options?.protocol === 'hls' ? 'm3u8' : 'mpd';
   return `${cfg.baseUrl}/video/:/transcode/universal/start.${ext}?${params}`;
 }
 
-export async function plexTimelineUpdate(cfg: PlexConfig, itemId: string, time: number, duration: number, state: 'playing' | 'paused' | 'stopped' | 'buffering') {
+export async function plexTimelineUpdate(cfg: PlexConfig, itemId: string, time: number, duration: number, state: 'playing'|'paused'|'stopped'|'buffering') {
+  const headers = getXPlexHeaders(cfg.token);
   const params = new URLSearchParams({
     ratingKey: itemId,
     key: `/library/metadata/${itemId}`,
     playbackTime: Math.floor(time).toString(),
+    time: Math.floor(time).toString(),
     duration: Math.floor(duration).toString(),
     state,
-    'X-Plex-Token': cfg.token,
+    context: 'library',
+    ...headers,
   });
-
   const url = `${cfg.baseUrl}/:/timeline?${params}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
   if (!res.ok) console.warn('Timeline update failed:', res.status);
   return res;
+}
+
+// Utilities moved from plex_player to consolidate
+export function plexTranscodeImageUrl(cfg: PlexConfig, path: string, width: number, height: number) {
+  const params = new URLSearchParams({
+    width: String(width),
+    height: String(height),
+    minSize: '1',
+    upscale: '1',
+    'X-Plex-Token': cfg.token,
+  });
+  return `${cfg.baseUrl}/photo/:/transcode?${params}&url=${encodeURIComponent(path)}`;
+}
+
+function getPlexSessionId(): string {
+  try {
+    let sid = sessionStorage.getItem('plex_session_id');
+    if (!sid) { sid = Math.random().toString(36).substring(2, 15); sessionStorage.setItem('plex_session_id', sid); }
+    return sid;
+  } catch {
+    return Math.random().toString(36).substring(2, 15);
+  }
+}
+
+export async function plexStopTranscodeSession(cfg: PlexConfig, sessionKey?: string) {
+  const params = new URLSearchParams({
+    session: sessionKey || getPlexSessionId(),
+    'X-Plex-Token': cfg.token,
+  });
+  const url = `${cfg.baseUrl}/video/:/transcode/universal/stop?${params}`;
+  try {
+    const res = await fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } });
+    if (!res.ok) console.warn('Failed to stop transcode session:', res.status);
+    return res;
+  } catch (e) {
+    console.error('Error stopping transcode session:', e);
+  }
+}
+
+export async function plexKillAllTranscodeSessions(cfg: PlexConfig) {
+  try { await plexStopTranscodeSession(cfg); } catch (e) { console.error('Error killing transcodes:', e); }
 }
 
 export async function plexPing(cfg: PlexConfig) {
@@ -368,18 +448,15 @@ export async function plexRecentlyAdded(days: number = 7, limitPerLib: number = 
   try {
     const s = loadSettings();
     if (!s.plexBaseUrl || !s.plexToken) return [];
-    const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
     const cfg = { baseUrl: s.plexBaseUrl!, token: s.plexToken! };
-    const libs: any = USE_BACKEND ? await plexBackendLibraries() : await plexLibs(cfg);
+    const libs: any = await plexBackendLibraries();
     const dirs = libs?.MediaContainer?.Directory || [];
     const since = Date.now() - days * 24 * 60 * 60 * 1000;
     const all: any[] = [];
     for (const d of dirs) {
       if (d.type !== 'movie' && d.type !== 'show') continue;
       try {
-        const res: any = USE_BACKEND
-          ? await plexBackendLibraryAll(String(d.key), { type: d.type === 'movie' ? 1 : 2, sort: 'addedAt:desc', offset: 0, limit: limitPerLib })
-          : await plexSectionAll(cfg, String(d.key), `?type=${d.type === 'movie' ? 1 : 2}&sort=addedAt:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=${limitPerLib}`);
+        const res: any = await plexBackendLibraryAll(String(d.key), { type: d.type === 'movie' ? 1 : 2, sort: 'addedAt:desc', offset: 0, limit: limitPerLib });
         const meta: any[] = res?.MediaContainer?.Metadata || [];
         for (const m of meta) {
           const added = (m.addedAt ? (Number(m.addedAt) * 1000) : 0);
@@ -400,9 +477,8 @@ export async function plexPopular(limitPerLib: number = 50): Promise<any[]> {
   try {
     const s = loadSettings();
     if (!s.plexBaseUrl || !s.plexToken) return [];
-    const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
     const cfg = { baseUrl: s.plexBaseUrl!, token: s.plexToken! };
-    const libs: any = USE_BACKEND ? await plexBackendLibraries() : await plexLibs(cfg);
+    const libs: any = await plexBackendLibraries();
     const dirs = libs?.MediaContainer?.Directory || [];
     const all: any[] = [];
     for (const d of dirs) {
@@ -410,15 +486,11 @@ export async function plexPopular(limitPerLib: number = 50): Promise<any[]> {
       let res: any = null;
       // Try lastViewedAt first, then viewCount
       try {
-        res = USE_BACKEND
-          ? await plexBackendLibraryAll(String(d.key), { type: d.type === 'movie' ? 1 : 2, sort: 'lastViewedAt:desc', offset: 0, limit: limitPerLib })
-          : await plexSectionAll(cfg, String(d.key), `?type=${d.type === 'movie' ? 1 : 2}&sort=lastViewedAt:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=${limitPerLib}`);
+        res = await plexBackendLibraryAll(String(d.key), { type: d.type === 'movie' ? 1 : 2, sort: 'lastViewedAt:desc', offset: 0, limit: limitPerLib });
       } catch {}
       if (!res) {
         try {
-          res = USE_BACKEND
-            ? await plexBackendLibraryAll(String(d.key), { type: d.type === 'movie' ? 1 : 2, sort: 'viewCount:desc', offset: 0, limit: limitPerLib })
-            : await plexSectionAll(cfg, String(d.key), `?type=${d.type === 'movie' ? 1 : 2}&sort=viewCount:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=${limitPerLib}`);
+          res = await plexBackendLibraryAll(String(d.key), { type: d.type === 'movie' ? 1 : 2, sort: 'viewCount:desc', offset: 0, limit: limitPerLib });
         } catch {}
       }
       const meta: any[] = res?.MediaContainer?.Metadata || [];

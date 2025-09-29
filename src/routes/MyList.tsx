@@ -81,7 +81,7 @@ export default function MyList() {
 
   async function loadPlexWatchlist(): Promise<WatchlistItem[]> {
     try {
-      const data = await plexTvWatchlist(settings.plexTvToken || settings.plexAccountToken || '');
+      const data = await plexTvWatchlist();
       const items = data.MediaContainer?.Metadata || [];
 
       return items.map((item: any) => {

@@ -71,6 +71,11 @@ export async function plexBackendSearch(query: string, type?: 1 | 2) {
   return { MediaContainer: { Metadata: items || [] } };
 }
 
+export async function plexBackendCollections(sectionKey: string) {
+  const mc = await backendFetch<any>(`/library/${encodeURIComponent(sectionKey)}/collections`);
+  return { MediaContainer: mc };
+}
+
 export async function plexBackendFindByGuid(guid: string, type?: 1 | 2) {
   const mc = await backendFetch<any>('/findByGuid', type ? { guid, type } : { guid });
   return { MediaContainer: mc };

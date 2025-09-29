@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { loadSettings, saveSettings } from '@/state/settings';
 import { forget } from '@/services/cache';
-import { createPin, pollPin, getResources, buildAuthUrl, pickBestConnection } from '@/services/plextv_auth';
+import { apiClient } from '@/services/api';
 import { TraktAuth } from '@/components/TraktAuth';
 import { getTraktTokens } from '@/services/trakt';
 
@@ -53,16 +53,17 @@ export default function Settings() {
                 <button className="btn" onClick={async()=>{
                   const cid = initial.plexClientId || crypto.randomUUID();
                   saveSettings({ plexClientId: cid });
-                  const pin:any = await createPin(cid);
-                  setAuth({ pinId: pin.id, code: pin.code });
+                  const pin:any = await apiClient.createPlexPin(cid);
+                  setAuth({ pinId: pin.id, code: pin.code, url: pin.authUrl } as any);
                 }}>Sign in with Plex</button>
               )}
               {initial.plexAccountToken && (
                 <button className="btn" onClick={async()=>{
-                  const cid = loadSettings().plexClientId!;
-                  const resources:any = await getResources(loadSettings().plexAccountToken!, cid);
-                  const list = (resources || []).filter((r:any)=> r.product === 'Plex Media Server');
-                  setServers(list);
+                  // Use backend to refresh and fetch servers
+                  const cid = loadSettings().plexClientId || 'web';
+                  try { await apiClient.syncPlexServers(cid); } catch {}
+                  const backendServers = await apiClient.getServers();
+                  setServers(backendServers || []);
                 }}>Refresh Servers</button>
               )}
             </div>
@@ -70,16 +71,15 @@ export default function Settings() {
               <div className="mt-3 text-sm">
                 <div className="mb-2">Enter this code at Plex: <span className="font-semibold text-white">{auth.code}</span></div>
                 <div className="flex gap-2">
-                  <button className="btn" onClick={()=> window.open(buildAuthUrl(loadSettings().plexClientId!, auth.code!), '_blank')}>Open Plex</button>
+                  <button className="btn" onClick={()=> window.open((auth as any).url || '', '_blank')}>Open Plex</button>
                   <button className="btn" onClick={async()=>{
                     const cid = loadSettings().plexClientId!;
-                    const res:any = await pollPin(cid, auth.pinId!);
-                    if (res?.authToken) {
-                      saveSettings({ plexAccountToken: res.authToken });
+                    const res:any = await apiClient.checkPlexPin(auth.pinId!, cid);
+                    if (res?.authenticated) {
                       setAuth({});
-                      const resources:any = await getResources(res.authToken, cid);
-                      const list = (resources || []).filter((r:any)=> r.product === 'Plex Media Server');
-                      setServers(list);
+                      try { await apiClient.syncPlexServers(cid); } catch {}
+                      const backendServers = await apiClient.getServers();
+                      setServers(backendServers || []);
                     }
                   }}>Poll</button>
                 </div>
@@ -90,18 +90,16 @@ export default function Settings() {
                 <div className="text-sm mb-2">Select a server</div>
                 <div className="grid gap-2">
                   {servers.map((s:any, idx:number)=>{
-                    const best = pickBestConnection(s);
                     return (
                       <div key={idx} className="flex items-center justify-between bg-white/5 rounded px-3 py-2">
                         <div className="text-neutral-200">{s.name || s.clientIdentifier}</div>
                         <div className="flex gap-2">
                           <button className="btn" onClick={async()=>{
-                            if (!best) return;
-                            saveSettings({ plexServer: { name: s.name, clientIdentifier: s.clientIdentifier, baseUrl: best.uri, token: best.token }, plexBaseUrl: best.uri, plexToken: best.token });
-                            setSelectedServer({ name: s.name, clientIdentifier: s.clientIdentifier, baseUrl: best.uri, token: best.token });
+                            saveSettings({ plexServer: { name: s.name, clientIdentifier: s.clientIdentifier, baseUrl: s.baseUrl, token: s.token }, plexBaseUrl: s.baseUrl, plexToken: s.token });
+                            setSelectedServer({ name: s.name, clientIdentifier: s.clientIdentifier, baseUrl: s.baseUrl, token: s.token });
                             // Clear Plex caches and notify app to refresh
                             forget('plex:');
-                            window.dispatchEvent(new CustomEvent('plex-server-changed', { detail: { name: s.name, baseUrl: best.uri } }));
+                            window.dispatchEvent(new CustomEvent('plex-server-changed', { detail: { name: s.name, baseUrl: s.baseUrl } }));
                           }}>Use</button>
                         </div>
                       </div>

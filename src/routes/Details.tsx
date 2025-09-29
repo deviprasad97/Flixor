@@ -2,8 +2,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Badge from '@/components/Badge';
 import Row from '@/components/Row';
 import { loadSettings } from '@/state/settings';
-import { plexMetadata, plexImage, plexSearch, plexChildren, plexFindByGuid, plexComprehensiveGuidSearch, plexMetadataWithExtras, plexPartUrl } from '@/services/plex';
-import { plexBackendMetadataWithExtras, plexBackendDir, plexBackendSearch } from '@/services/plex_backend';
+import { plexMetadata, plexSearch, plexChildren, plexFindByGuid, plexComprehensiveGuidSearch, plexMetadataWithExtras, plexPartUrl } from '@/services/plex';
+import { plexBackendMetadataWithExtras, plexBackendDir, plexBackendSearch, plexBackendFindByGuid, plexBackendMetadata } from '@/services/plex_backend';
 import { tmdbDetails, tmdbImage, tmdbCredits, tmdbExternalIds, tmdbRecommendations, tmdbVideos, tmdbSearchTitle, tmdbTvSeasons, tmdbTvSeasonEpisodes, tmdbSimilar, tmdbImages } from '@/services/tmdb';
 import { apiClient } from '@/services/api';
 import { plexTvAddToWatchlist } from '@/services/plextv';
@@ -72,7 +72,6 @@ export default function Details() {
     // expose setter for trailer mute to toggle function
     (window as any).reactSetTrailerMuted = setTrailerMuted;
     const s = loadSettings();
-    const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
     async function load() {
       if (!id) return;
       try {
@@ -84,9 +83,9 @@ export default function Details() {
         setTrailerMuted(true);
         setBackdrop('');
         setLogoUrl(undefined);
-        if (id.startsWith('plex:') && s.plexBaseUrl && s.plexToken) {
+        if (id.startsWith('plex:')) {
           const rk = id.replace(/^plex:/, '');
-          const meta: any = await plexMetadata({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk);
+          const meta: any = await plexBackendMetadata(rk);
           const m = meta?.MediaContainer?.Metadata?.[0];
           if (m) {
             setTitle(m.title || m.grandparentTitle || '');
@@ -94,9 +93,8 @@ export default function Details() {
             {
               const pBackdrop = m.art || m.thumb || m.parentThumb || m.grandparentThumb;
               const pPoster = m.thumb || m.parentThumb || m.grandparentThumb;
-              const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
-              setBackdrop(USE_BACKEND ? apiClient.getPlexImageNoToken(pBackdrop || '') : (plexImage(s.plexBaseUrl!, s.plexToken!, pBackdrop) || backdrop));
-              setPoster(USE_BACKEND ? apiClient.getPlexImageNoToken(pPoster || '') : plexImage(s.plexBaseUrl!, s.plexToken!, pPoster));
+              setBackdrop(apiClient.getPlexImageNoToken(pBackdrop || '') || backdrop);
+              setPoster(apiClient.getPlexImageNoToken(pPoster || ''));
             }
             setKind(m.type === 'movie' ? 'movie' : (m.type === 'show' ? 'tv' : undefined));
             setMeta({
@@ -106,7 +104,7 @@ export default function Details() {
             });
             if (m.year) setYear(String(m.year));
             try { setMoodTags(deriveTags((m.Genre||[]).map((g:any)=>g.tag))); } catch {}
-            setCast((m.Role || []).slice(0, 12).map((r: any) => ({ name: r.tag, img: ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true) ? apiClient.getPlexImageNoToken(r.thumb || '') : plexImage(s.plexBaseUrl!, s.plexToken!, r.thumb) })));
+            setCast((m.Role || []).slice(0, 12).map((r: any) => ({ name: r.tag, img: apiClient.getPlexImageNoToken(r.thumb || '') })));
             // Badges detection
             const bs: string[] = [];
             const media = (m.Media || [])[0];
@@ -214,9 +212,7 @@ export default function Details() {
             }
             // Try Plex Extras for trailer preview
             try {
-              const ex: any = USE_BACKEND
-                ? await plexBackendMetadataWithExtras(rk)
-                : await plexMetadataWithExtras({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk);
+              const ex: any = await plexBackendMetadataWithExtras(rk);
               const em = ex?.MediaContainer?.Metadata?.[0]?.Extras?.Metadata?.[0];
               const pkey = em?.Media?.[0]?.Part?.[0]?.key as string | undefined;
               if (pkey) {
@@ -227,9 +223,7 @@ export default function Details() {
             // Seasons for Plex-native series
             if (m.type === 'show') {
               try {
-                const ch: any = USE_BACKEND
-                  ? await plexBackendDir(`/library/metadata/${rk}/children`)
-                  : await plexChildren({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk);
+                const ch: any = await plexBackendDir(`/library/metadata/${rk}/children`);
                 const ss = (ch?.MediaContainer?.Metadata||[]).map((x:any)=>({ key:String(x.ratingKey), title:x.title }));
                 setSeasons(ss);
                 if (ss[0]) setSeasonKey(ss[0].key);
@@ -317,33 +311,22 @@ export default function Details() {
                   }
                 } catch {}
 
-                // Use comprehensive search to find items by any of these GUIDs
+                // Use backend GUID search for each GUID and merge
                 try {
-                  if (USE_BACKEND) {
-                    const t = media === 'movie' ? 1 : 2;
-                    for (const guid of searchGuids) {
-                      try {
-                        const gr: any = await plexBackendDir('/library/all', { guid, type: t });
-                        const hits = (gr?.MediaContainer?.Metadata || []) as any[];
-                        if (hits.length) allHits.push(...hits);
-                      } catch {}
-                    }
-                  } else {
-                    const guidResults: any = await plexComprehensiveGuidSearch(
-                      { baseUrl: s.plexBaseUrl!, token: s.plexToken! },
-                      searchGuids,
-                      media === 'movie' ? 1 : 2
-                    );
-                    allHits = (guidResults?.MediaContainer?.Metadata || []) as any[];
+                  const t = media === 'movie' ? 1 : 2;
+                  for (const guid of searchGuids) {
+                    try {
+                      const gr: any = await plexBackendFindByGuid(guid, t as 1|2);
+                      const hits = (gr?.MediaContainer?.Metadata || []) as any[];
+                      if (hits.length) allHits.push(...hits);
+                    } catch {}
                   }
                 } catch {}
 
                 // Method 3: Title search as last resort
                 if (allHits.length === 0) {
                   try {
-                    const search: any = USE_BACKEND
-                      ? await plexBackendSearch(q, media === 'movie' ? 1 : 2)
-                      : await plexSearch({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, q, (media === 'movie' ? 1 : 2));
+                    const search: any = await plexBackendSearch(q, media === 'movie' ? 1 : 2);
                     allHits = (search?.MediaContainer?.Metadata || []) as any[];
                   } catch {}
                 }
@@ -392,9 +375,7 @@ export default function Details() {
                   // Replace backdrop with plex art for authenticity and add badges
                   const m = match;
                   setPlexMappedId(`plex:${String(m.ratingKey)}`);
-                  setBackdrop(((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
-                    ? apiClient.getPlexImageNoToken((m.art || m.thumb || m.parentThumb || m.grandparentThumb) || '')
-                    : plexImage(s.plexBaseUrl!, s.plexToken!, m.art || m.thumb || m.parentThumb || m.grandparentThumb) || backdrop);
+                  setBackdrop(apiClient.getPlexImageNoToken((m.art || m.thumb || m.parentThumb || m.grandparentThumb) || '') || backdrop);
                   const extra: string[] = [];
                   const media0 = (m.Media || [])[0];
                   if (media0) {
@@ -429,19 +410,19 @@ export default function Details() {
                   const part = media0?.Part?.[0];
                   if (part?.id) setPlexWatch(`${s.plexBaseUrl!.replace(/\/$/, '')}/library/parts/${part.id}/stream?X-Plex-Token=${s.plexToken}`);
                   // If it's a show, load seasons/episodes
-                  if (m.type === 'show') {
-                    try {
-                      const ch: any = await plexChildren({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, String(m.ratingKey));
-                      const ss = (ch?.MediaContainer?.Metadata || []).map((x: any) => ({ key: String(x.ratingKey), title: x.title }));
-                      setSeasons(ss);
-                      if (ss[0]) setSeasonKey(ss[0].key);
-                    } catch (e) { console.error(e); }
-                  }
+            if (m.type === 'show') {
+              try {
+                const ch: any = await plexBackendDir(`/library/metadata/${String(m.ratingKey)}/children`);
+                const ss = (ch?.MediaContainer?.Metadata || []).map((x: any) => ({ key: String(x.ratingKey), title: x.title }));
+                setSeasons(ss);
+                if (ss[0]) setSeasonKey(ss[0].key);
+              } catch (e) { console.error(e); }
+            }
                   // Prefer cast from Plex if available for better thumbs
-                  if (match.Role && match.Role.length) setCast(match.Role.slice(0,12).map((r: any) => ({ name: r.tag, img: ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true) ? apiClient.getPlexImageNoToken(r.thumb || '') : plexImage(s.plexBaseUrl!, s.plexToken!, r.thumb) })));
+                  if (match.Role && match.Role.length) setCast(match.Role.slice(0,12).map((r: any) => ({ name: r.tag, img: apiClient.getPlexImageNoToken(r.thumb || '') })));
                   // Trailer from Plex Extras for matched item
                   try {
-                    const ex: any = await plexMetadataWithExtras({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, String(m.ratingKey));
+                    const ex: any = await plexBackendMetadataWithExtras(String(m.ratingKey));
                     const em = ex?.MediaContainer?.Metadata?.[0]?.Extras?.Metadata?.[0];
                     const pkey = em?.Media?.[0]?.Part?.[0]?.key as string | undefined;
                     if (pkey) {
@@ -469,17 +450,13 @@ export default function Details() {
       try {
         setEpisodesLoading(true);
         // Prefer Plex episodes if plex seasonKey is numeric (ratingKey), otherwise use TMDB fallback
-        if (/^\d+$/.test(seasonKey) && s.plexBaseUrl && s.plexToken) {
-          const ch: any = ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
-            ? await plexBackendDir(`/library/metadata/${seasonKey}/children`)
-            : await plexChildren({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, seasonKey);
+        if (/^\d+$/.test(seasonKey)) {
+          const ch: any = await plexBackendDir(`/library/metadata/${seasonKey}/children`);
           const eps = (ch?.MediaContainer?.Metadata||[]).map((e:any)=>({
             id: `plex:${e.ratingKey}`,
             title: e.title,
             overview: e.summary,
-            image: ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
-              ? apiClient.getPlexImageNoToken((e.thumb || e.parentThumb) || '')
-              : plexImage(s.plexBaseUrl!, s.plexToken!, e.thumb || e.parentThumb),
+            image: apiClient.getPlexImageNoToken((e.thumb || e.parentThumb) || ''),
             duration: Math.round((e.duration||0)/60000),
             progress: e.viewOffset ? Math.round(((e.viewOffset/1000)/((e.duration||1)/1000))*100) : 0,
           }));

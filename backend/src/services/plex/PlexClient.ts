@@ -131,13 +131,47 @@ export class PlexClient {
     }
 
     logger.debug(`Plex API request: ${path}`);
-    const response = await this.axiosClient.get<T>(path);
-    const data = response.data;
+    const data = await this.requestWithFallback<T>(path);
 
     // Cache the response
     cacheManager.set('plex', key, data, ttl);
 
     return data;
+  }
+
+  private async requestWithFallback<T>(path: string): Promise<T> {
+    try {
+      const res = await this.axiosClient.get<T>(path);
+      return res.data as any as T;
+    } catch (err: any) {
+      const candidates: string[] = [];
+      const port = this.server.port || 32400;
+      const protos: Array<'https'|'http'> = this.server.protocol === 'https' ? ['https','http'] : ['http','https'];
+      const push = (proto: string, host?: string) => { if (host) candidates.push(`${proto}://${host}:${port}`); };
+      // Original
+      push(this.server.protocol, this.server.host);
+      // Public
+      if (this.server.publicAddress) { protos.forEach(p => push(p, this.server.publicAddress)); }
+      // Locals
+      (this.server.localAddresses || []).forEach(addr => protos.forEach(p => push(p, addr)));
+
+      for (const base of candidates) {
+        try {
+          const alt = axios.create({
+            baseURL: base,
+            timeout: 10000,
+            headers: this.axiosClient.defaults.headers.common,
+          });
+          const res = await alt.get<T>(path);
+          // Switch to the working base for future calls
+          this.axiosClient.defaults.baseURL = base;
+          return res.data as any as T;
+        } catch (e) {
+          continue;
+        }
+      }
+      throw err;
+    }
   }
 
   /**
@@ -272,6 +306,19 @@ export class PlexClient {
     const data = await this.cachedRequest<any>(
       path,
       `${this.server.id}:secondary:${libraryKey}:${directory}`,
+      3600
+    );
+    return data.MediaContainer;
+  }
+
+  /**
+   * Get collections for a library section
+   */
+  async getLibraryCollections(libraryKey: string) {
+    const path = `/library/sections/${libraryKey}/collections`;
+    const data = await this.cachedRequest<any>(
+      path,
+      `${this.server.id}:collections:${libraryKey}`,
       3600
     );
     return data.MediaContainer;

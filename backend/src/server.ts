@@ -22,6 +22,7 @@ import imageProxyRoutes from './api/image-proxy';
 import tmdbRoutes from './api/tmdb';
 import plexRoutes from './api/plex';
 import traktRoutes from './api/trakt';
+import plextvRoutes from './api/plextv';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 
@@ -108,6 +109,7 @@ async function startServer() {
     app.use('/api/tmdb', tmdbRoutes);
     app.use('/api/plex', plexRoutes);
     app.use('/api/trakt', traktRoutes);
+    app.use('/api/plextv', plextvRoutes);
 
     // 404 handler
     app.use((req, res) => {

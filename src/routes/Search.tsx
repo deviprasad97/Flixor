@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { loadSettings } from '@/state/settings';
-import { plexSearch, plexImage, plexLibs, plexSectionAll, plexCollections } from '@/services/plex';
+import { plexSearch } from '@/services/plex';
 import { apiClient } from '@/services/api';
 import { plexBackendLibraries, plexBackendSearch } from '@/services/plex_backend';
 import { tmdbSearchMulti, tmdbTrending, tmdbImage, tmdbPopular } from '@/services/tmdb';
@@ -107,25 +107,23 @@ export default function Search() {
     // Load Plex collections
     if (s.plexBaseUrl && s.plexToken) {
       try {
-        const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
-        const libs: any = USE_BACKEND ? await plexBackendLibraries() : await plexLibs({ baseUrl: s.plexBaseUrl, token: s.plexToken });
+        const libs: any = await plexBackendLibraries();
         const directories = libs?.MediaContainer?.Directory || [];
         const collectionsList: SearchResult[] = [];
 
         // Get collections from each library
         for (const lib of directories.slice(0, 2)) {
           try {
-            const cols: any = await plexCollections({ baseUrl: s.plexBaseUrl, token: s.plexToken }, lib.key);
+            const cols: any = await plexBackendCollections(lib.key);
             const items = cols?.MediaContainer?.Metadata || [];
 
             items.slice(0, 3).forEach((col: any) => {
-              const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
               const p = col.thumb || col.art;
               collectionsList.push({
                 id: `plex:collection:${col.ratingKey}`,
                 title: col.title,
                 type: 'collection',
-                image: USE_BACKEND ? apiClient.getPlexImageNoToken(p || '') : plexImage(s.plexBaseUrl!, s.plexToken!, p),
+                image: apiClient.getPlexImageNoToken(p || ''),
                 overview: col.summary
               });
             });
@@ -155,10 +153,7 @@ export default function Search() {
       if (s.plexBaseUrl && s.plexToken) {
         try {
           // Search movies
-          const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
-          const plexMovies: any = USE_BACKEND
-            ? await plexBackendSearch(searchQuery, 1)
-            : await plexSearch({ baseUrl: s.plexBaseUrl, token: s.plexToken }, searchQuery, 1);
+          const plexMovies: any = await plexBackendSearch(searchQuery, 1);
           const movieResults = plexMovies?.MediaContainer?.Metadata || [];
 
           movieResults.slice(0, 10).forEach((item: any) => {
@@ -166,9 +161,7 @@ export default function Search() {
               id: `plex:${item.ratingKey}`,
               title: item.title,
               type: 'movie',
-              image: ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
-                ? apiClient.getPlexImageNoToken((item.art || item.thumb || item.parentThumb || item.grandparentThumb) || '')
-                : plexImage(s.plexBaseUrl!, s.plexToken!, item.art || item.thumb || item.parentThumb || item.grandparentThumb),
+              image: apiClient.getPlexImageNoToken((item.art || item.thumb || item.parentThumb || item.grandparentThumb) || ''),
               year: item.year ? String(item.year) : undefined,
               overview: item.summary,
               available: true
@@ -176,9 +169,7 @@ export default function Search() {
           });
 
           // Search TV shows
-          const plexShows: any = USE_BACKEND
-            ? await plexBackendSearch(searchQuery, 2)
-            : await plexSearch({ baseUrl: s.plexBaseUrl, token: s.plexToken }, searchQuery, 2);
+          const plexShows: any = await plexBackendSearch(searchQuery, 2);
           const showResults = plexShows?.MediaContainer?.Metadata || [];
 
           showResults.slice(0, 10).forEach((item: any) => {
@@ -186,9 +177,7 @@ export default function Search() {
               id: `plex:${item.ratingKey}`,
               title: item.title,
               type: 'tv',
-              image: ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
-                ? apiClient.getPlexImageNoToken((item.art || item.thumb || item.parentThumb || item.grandparentThumb) || '')
-                : plexImage(s.plexBaseUrl!, s.plexToken!, item.art || item.thumb || item.parentThumb || item.grandparentThumb),
+              image: apiClient.getPlexImageNoToken((item.art || item.thumb || item.parentThumb || item.grandparentThumb) || ''),
               year: item.year ? String(item.year) : undefined,
               overview: item.summary,
               available: true

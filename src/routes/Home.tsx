@@ -7,11 +7,10 @@ import { loadSettings, saveSettings } from '@/state/settings';
 import { apiClient, checkAuth } from '@/services/api';
 import { tmdbTrending, tmdbImage, tmdbVideos, tmdbImages, tmdbDetails } from '@/services/tmdb';
 import { traktTrending, isTraktAuthenticated } from '@/services/trakt';
-import { plexOnDeckGlobal, plexImage, plexLibs, plexSectionAll, plexMetadataWithExtras, plexPartUrl, plexLibrarySecondary, plexDir } from '@/services/plex';
+import { plexPartUrl } from '@/services/plex';
 import { plexBackendOnDeckGlobal, plexBackendContinue, plexBackendLibraries, plexBackendLibrarySecondary, plexBackendDir, plexBackendLibraryAll, plexBackendMetadataWithExtras } from '@/services/plex_backend';
 import BrowseModal from '@/components/BrowseModal';
 import { plexTvWatchlist } from '@/services/plextv';
-import { createPin, pollPin, getResources, buildAuthUrl, pickBestConnection, getUserProfile } from '@/services/plextv_auth';
 import SectionBanner from '@/components/SectionBanner';
 import { TraktSection } from '@/components/TraktSection';
 
@@ -140,18 +139,15 @@ export default function Home() {
         }
         // Trakt content will be handled by TraktSection components below
         // Continue Watching via Plex if configured
-        const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
         // eslint-disable-next-line no-console
-        console.info('[Home] Using backend for Plex reads:', USE_BACKEND);
+        console.info('[Home] Using backend for Plex reads');
         if (s.plexBaseUrl && s.plexToken) {
           try {
-            const deck: any = USE_BACKEND
-              ? await plexBackendContinue()
-              : await plexOnDeckGlobal({ baseUrl: s.plexBaseUrl, token: s.plexToken });
+            const deck: any = await plexBackendContinue();
             const meta = deck?.MediaContainer?.Metadata || [];
             const items: any[] = meta.slice(0, 10).map((m: any, i: number) => {
               const p = m.thumb || m.parentThumb || m.grandparentThumb || m.art;
-              const img = USE_BACKEND ? apiClient.getPlexImageNoToken(p || '') : plexImage(s.plexBaseUrl!, s.plexToken!, p);
+              const img = apiClient.getPlexImageNoToken(p || '');
               const duration = (m.duration || 0) / 1000;
               const vo = (m.viewOffset || 0) / 1000;
               const progress = duration > 0 ? Math.min(100, Math.max(1, Math.round((vo / duration) * 100))) : 0;
@@ -162,9 +158,9 @@ export default function Home() {
             setNeedsPlex(true);
           }
           // Watchlist via Plex.tv if configured
-          if (s.plexTvToken) {
+          if (true) {
             try {
-              const wl: any = await plexTvWatchlist(s.plexTvToken);
+              const wl: any = await plexTvWatchlist();
               const meta = wl?.MediaContainer?.Metadata || [];
               const wlItems: Item[] = meta.slice(0, 12).map((m: any, i: number) => ({
                 id: inferIdFromGuid(m) || `guid:${encodeURIComponent(m.guid||'')}`,
@@ -178,27 +174,21 @@ export default function Home() {
           }
           // Genre-based rows from first matching library containing that genre
           try {
-            const libs: any = USE_BACKEND
-              ? await plexBackendLibraries()
-              : await plexLibs({ baseUrl: s.plexBaseUrl!, token: s.plexToken! });
+            const libs: any = await plexBackendLibraries();
             const dirs = libs?.MediaContainer?.Directory || [];
             for (const gr of genreRows) {
               const lib = dirs.find((d: any) => d.type === (gr.type === 'movie' ? 'movie' : 'show'));
               if (!lib) continue;
               try {
-                const gens: any = USE_BACKEND
-                  ? await plexBackendLibrarySecondary(String(lib.key), 'genre')
-                  : await plexLibrarySecondary({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, String(lib.key), 'genre');
+                const gens: any = await plexBackendLibrarySecondary(String(lib.key), 'genre');
                 const gx = (gens?.MediaContainer?.Directory || []).find((g: any) => String(g.title).toLowerCase() === gr.genre.toLowerCase());
                 if (!gx) continue;
                 const path = `/library/sections/${lib.key}/genre/${gx.key}`;
-                const data: any = USE_BACKEND
-                  ? await plexBackendDir(path)
-                  : await plexDir({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, path);
+                const data: any = await plexBackendDir(path);
                 const meta = data?.MediaContainer?.Metadata || [];
                 const items: Item[] = meta.slice(0, 12).map((m: any) => {
                   const p = m.thumb || m.parentThumb || m.grandparentThumb || m.art;
-                  const img = USE_BACKEND ? apiClient.getPlexImageNoToken(p || '') : plexImage(s.plexBaseUrl!, s.plexToken!, p);
+                  const img = apiClient.getPlexImageNoToken(p || '');
                   return { id: `plex:${m.ratingKey}`, title: m.title || m.grandparentTitle || 'Title', image: img };
                 });
                 const row: any = { title: gr.label, items };
@@ -209,7 +199,7 @@ export default function Home() {
           } catch {}
           // Try to build a Plex-based hero like Nevu
           try {
-            const libs: any = USE_BACKEND ? await plexBackendLibraries() : await plexLibs({ baseUrl: s.plexBaseUrl!, token: s.plexToken! });
+              const libs: any = await plexBackendLibraries();
             const dirs = libs?.MediaContainer?.Directory || [];
             const elig = dirs.filter((d: any) => d.type === 'movie' || d.type === 'show');
             for (let attempts = 0; attempts < 8; attempts++) {
@@ -217,20 +207,16 @@ export default function Home() {
               if (!lib) break;
               const t = lib.type === 'movie' ? 1 : 2;
               const q = `?type=${t}&sort=random:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=1`;
-              const res: any = USE_BACKEND
-                ? await plexBackendLibraryAll(String(lib.key), { type: t, sort: 'random:desc', offset: 0, limit: 1 })
-                : await plexSectionAll({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, String(lib.key), q);
+              const res: any = await plexBackendLibraryAll(String(lib.key), { type: t, sort: 'random:desc', offset: 0, limit: 1 });
               const m = res?.MediaContainer?.Metadata?.[0];
               if (!m) continue;
-              const meta: any = USE_BACKEND
-                ? await plexBackendMetadataWithExtras(String(m.ratingKey))
-                : await plexMetadataWithExtras({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, String(m.ratingKey));
+              const meta: any = await plexBackendMetadataWithExtras(String(m.ratingKey));
               const mm = meta?.MediaContainer?.Metadata?.[0];
               if (!mm) continue;
               const pPoster = mm.thumb || mm.parentThumb || mm.grandparentThumb;
               const pBackdrop = mm.art || mm.parentThumb || mm.grandparentThumb || mm.thumb;
-              const poster = USE_BACKEND ? apiClient.getPlexImageNoToken(pPoster || '') : plexImage(s.plexBaseUrl!, s.plexToken!, pPoster);
-              const backdrop = USE_BACKEND ? apiClient.getPlexImageNoToken(pBackdrop || '') : plexImage(s.plexBaseUrl!, s.plexToken!, pBackdrop);
+              const poster = apiClient.getPlexImageNoToken(pPoster || '');
+              const backdrop = apiClient.getPlexImageNoToken(pBackdrop || '');
               const extra = mm?.Extras?.Metadata?.[0]?.Media?.[0]?.Part?.[0]?.key as string | undefined;
               const videoUrl = extra ? plexPartUrl(s.plexBaseUrl!, s.plexToken!, extra) : undefined;
 

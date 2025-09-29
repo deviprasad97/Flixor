@@ -25,18 +25,13 @@ export default function ContinueCard({ id, title, image, progress, onClick }: Pr
           }
           return;
         }
-        if (s.tmdbBearer && id.startsWith('plex:') && s.plexBaseUrl && s.plexToken) {
+        if (s.tmdbBearer && id.startsWith('plex:')) {
           const rk = id.replace(/^plex:/, '');
-          const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
-          const meta: any = USE_BACKEND
-            ? await plexBackendMetadata(rk)
-            : await plexMetadata({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk);
+          const meta: any = await plexBackendMetadata(rk);
           let m = meta?.MediaContainer?.Metadata?.[0];
           // If this is an episode, prefer the show (grandparent) for TMDB mapping/backdrop
           if (m?.type === 'episode' && m?.grandparentRatingKey) {
-            const showMeta: any = USE_BACKEND
-              ? await plexBackendMetadata(String(m.grandparentRatingKey))
-              : await plexMetadata({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, String(m.grandparentRatingKey));
+            const showMeta: any = await plexBackendMetadata(String(m.grandparentRatingKey));
             const sm = showMeta?.MediaContainer?.Metadata?.[0];
             if (sm) m = sm;
           }

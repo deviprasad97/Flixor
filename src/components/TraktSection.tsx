@@ -131,9 +131,7 @@ export function TraktSection({ type = 'trending', mediaType = 'movies', title }:
         if (hit) {
           const rk = String(hit.ratingKey);
           const p = hit.art || hit.thumb || hit.parentThumb || hit.grandparentThumb;
-          const img = ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
-            ? (p ? apiClient.getPlexImageNoToken(p) : placeholderImg())
-            : (plexImage(s.plexBaseUrl!, s.plexToken!, p) || placeholderImg());
+          const img = p ? apiClient.getPlexImageNoToken(p) : placeholderImg();
           out.push({ id: `plex:${rk}`, title, image: img });
           continue;
         }
@@ -159,9 +157,7 @@ export function TraktSection({ type = 'trending', mediaType = 'movies', title }:
             if (hit) {
               const rk = String(hit.ratingKey);
               const p = hit.art || hit.thumb || hit.parentThumb || hit.grandparentThumb;
-              const img = ((import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true)
-                ? (p ? apiClient.getPlexImageNoToken(p) : placeholderImg())
-                : (plexImage(s.plexBaseUrl!, s.plexToken!, p) || placeholderImg());
+              const img = p ? apiClient.getPlexImageNoToken(p) : placeholderImg();
               out.push({ id: `plex:${rk}`, title, image: img });
               continue;
             }
@@ -173,7 +169,7 @@ export function TraktSection({ type = 'trending', mediaType = 'movies', title }:
             const hit = (byTvdb?.MediaContainer?.Metadata || [])[0];
             if (hit) {
               const rk = String(hit.ratingKey);
-              const img = plexImage(s.plexBaseUrl!, s.plexToken!, hit.art || hit.thumb || hit.parentThumb || hit.grandparentThumb) || placeholderImg();
+              const img = (hit.art || hit.thumb || hit.parentThumb || hit.grandparentThumb) ? apiClient.getPlexImageNoToken(hit.art || hit.thumb || hit.parentThumb || hit.grandparentThumb) : placeholderImg();
               out.push({ id: `plex:${rk}`, title, image: img });
               continue;
             }

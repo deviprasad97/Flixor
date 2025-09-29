@@ -17,10 +17,9 @@ import {
   plexUpdateAudioStream,
   plexUpdateSubtitleStream,
   plexTranscodeImageUrl,
-  plexDirectPlayUrl,
-  plexStopTranscodeSession,
   plexKillAllTranscodeSessions,
-} from '@/services/plex_player';
+  plexPartUrl,
+} from '@/services/plex';
 import { backendStreamUrl, backendUpdateProgress } from '@/services/plex_backend_player';
 import {
   canDirectPlay,
@@ -250,10 +249,8 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
         hasRetriedWithTranscode.current = false; // Reset retry flag when loading new content
         
         // Load metadata
-        const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
-        const metaResponse = USE_BACKEND
-          ? await (await import('@/services/plex_backend')).plexBackendMetadata(itemId)
-          : await plexMetadata(plexConfig, itemId);
+        // Prefer backend for metadata; fallback to direct if it fails
+        const metaResponse = await (await import('@/services/plex_backend')).plexBackendMetadata(itemId);
         const meta = metaResponse.MediaContainer.Metadata[0] as PlexMetadata;
         setMetadata(meta);
         
@@ -291,53 +288,41 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
           setTimeout(() => setCodecErrorMessage(null), 5000);
         }
 
-        if (USE_BACKEND) {
-          // Use backend to generate proxied stream URL (HLS)
-          const qualityNum = (typeof effectiveQuality === 'number') ? effectiveQuality : undefined;
-          const url = await backendStreamUrl(itemId, {
-            quality: qualityNum,
-            resolution: undefined,
-            audioStreamID: selectedAudioStream || undefined,
-            subtitleStreamID: selectedSubtitleStream || undefined,
-          });
-          setStreamUrl(url);
+        // Build stream URL using the same logic as commit 147b572 (direct, not proxied)
+        const decision = getStreamDecision(meta, {
+          quality: effectiveQuality,
+          directPlay: effectiveQuality === 'original' && !hasDV,
+          audioStreamId: selectedAudioStream || undefined,
+          subtitleStreamId: selectedSubtitleStream || undefined,
+        });
+
+        // Call decision API to see what Plex will actually do
+        const plexDecision = await plexUniversalDecision(plexConfig, itemId, {
+          maxVideoBitrate: effectiveQuality === 'original' ? undefined : Number(effectiveQuality),
+          protocol: 'dash',
+          autoAdjustQuality: false,
+          directPlay: decision.directPlay,
+          directStream: decision.directStream,
+          audioStreamID: selectedAudioStream || undefined,
+          subtitleStreamID: selectedSubtitleStream || undefined,
+        });
+
+        // Generate stream URL based on actual Plex decision
+        let url: string;
+        if (plexDecision.canDirectPlay && meta.Media?.[0]?.Part?.[0]?.key && !hasDV) {
+          url = plexPartUrl(plexConfig.baseUrl, plexConfig.token, meta.Media[0].Part[0].key);
         } else {
-          // Determine stream decision
-          const decision = getStreamDecision(meta, {
-            quality: effectiveQuality,
-            directPlay: effectiveQuality === 'original' && !hasDV,
-            audioStreamId: selectedAudioStream || undefined,
-            subtitleStreamId: selectedSubtitleStream || undefined,
-          });
-
-          // Call decision API to see what Plex will actually do
-          const plexDecision = await plexUniversalDecision(plexConfig, itemId, {
+          url = plexStreamUrl(plexConfig, itemId, {
             maxVideoBitrate: effectiveQuality === 'original' ? undefined : Number(effectiveQuality),
-            protocol: 'dash', // Use DASH like Plex Web for better codec support
+            protocol: 'dash',
             autoAdjustQuality: false,
-            directPlay: decision.directPlay,
-            directStream: decision.directStream,
+            directPlay: false,
+            directStream: plexDecision.willDirectStream || false,
             audioStreamID: selectedAudioStream || undefined,
             subtitleStreamID: selectedSubtitleStream || undefined,
           });
-
-          // Generate stream URL based on actual Plex decision
-          let url: string;
-          if (plexDecision.canDirectPlay && meta.Media?.[0]?.Part?.[0]?.key && !hasDV) {
-            url = plexDirectPlayUrl(plexConfig, meta.Media[0].Part[0].key);
-          } else {
-            url = plexStreamUrl(plexConfig, itemId, {
-              maxVideoBitrate: effectiveQuality === 'original' ? undefined : Number(effectiveQuality),
-              protocol: 'dash',
-              autoAdjustQuality: false,
-              directPlay: false,
-              directStream: plexDecision.willDirectStream || false,
-              audioStreamID: selectedAudioStream || undefined,
-              subtitleStreamID: selectedSubtitleStream || undefined,
-            });
-          }
-          setStreamUrl(url);
         }
+        setStreamUrl(url);
         
         // Load play queue for episodes
         if (meta.type === 'episode') {
@@ -368,18 +353,8 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
     
     const updateTimeline = () => {
       const state = buffering ? 'buffering' : playing ? 'playing' : 'paused';
-      const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
-      if (USE_BACKEND) {
-        backendUpdateProgress(metadata.ratingKey, currentTime * 1000, duration * 1000, state as any).catch(console.warn);
-      } else {
-        plexTimelineUpdate(
-          plexConfig,
-          metadata.ratingKey,
-          currentTime * 1000,
-          duration * 1000,
-          state
-        ).catch(console.warn);
-      }
+      // Keep backend for progress updates, but playback URL logic is direct
+      backendUpdateProgress(metadata.ratingKey, currentTime * 1000, duration * 1000, state as any).catch(console.warn);
     };
     
     // Initial update
@@ -537,7 +512,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
       // Generate new stream URL based on actual Plex decision
       let url: string;
       if (plexDecision.canDirectPlay && metadata.Media?.[0]?.Part?.[0]?.key) {
-        url = plexDirectPlayUrl(plexConfig, metadata.Media[0].Part[0].key);
+        url = plexPartUrl(plexConfig.baseUrl, plexConfig.token, metadata.Media[0].Part[0].key);
         // console.log('Using direct play based on Plex decision');
       } else {
         const bitrateValue = newQuality === 'original' ? undefined : Number(newQuality);

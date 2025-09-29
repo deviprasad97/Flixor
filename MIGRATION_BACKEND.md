@@ -64,6 +64,15 @@ Phase 2 wrap (stabilization)
 - Validate all read endpoints under `VITE_USE_BACKEND_PLEX=true` across Home/Library/Search/Details.
 - Audit remaining direct Plex reads and swap to backend equivalents where missing.
 
+De-stale pass (completed)
+- Frontend now delegates GUID lookups, libraries, directories, metadata (when flagged) through backend.
+- Removed stale/duplicated client helpers:
+  - Deleted: `src/services/plex_player.ts`, `src/services/plex_stream.ts`, `src/services/plextv_auth.ts`.
+  - Consolidated player helpers into `src/services/plex.ts` (decision, stream URL, timeline, stop transcode, image transcode, part URL).
+  - Updated components to use consolidated helpers:
+    - AdvancedPlayer and Player now import from `src/services/plex.ts` (and backend variants where applicable).
+    - Settings and TopNav use backend auth/server routes (`apiClient`) instead of direct Plex.tv helpers.
+
 Phase 3 – Player hardening
 - Progress + Scrobble
   - Confirm final scrobble and rating flows via backend from the player UI.
@@ -72,6 +81,17 @@ Phase 3 – Player hardening
 Phase 4 – Image proxy adoption (security + caching)
 - Replace Plex image URLs in the UI with `/api/image/plex?path=...` so the backend derives server/token from the signed‑in user; no tokens in the browser.
 - Keep TMDB direct unless optimization is needed.
+
+What still intentionally calls Plex directly (for now)
+- Playback: the streaming URL returned by backend points to Plex (`start.mpd`/`start.m3u8`/direct part). This matches legacy behavior and avoids proxy complexity.
+- Plex Discover (watchlist) remains via `src/services/plextv.ts` (web-only); can be migrated later.
+
+Done – Plex Discover watchlist via backend
+- Added backend routes under `/api/plextv` to proxy Plex Discover:
+  - `GET /api/plextv/watchlist`
+  - `PUT /api/plextv/watchlist/:id`
+  - `DELETE /api/plextv/watchlist/:id`
+- Frontend `src/services/plextv.ts` now uses these endpoints with cookies; no tokens are sent from the browser.
 
 Phase 5 – Optional: Proxy‑based streaming (tokenless)
 - Design

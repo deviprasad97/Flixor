@@ -157,6 +157,24 @@ router.get('/library/:id/:directory',
 );
 
 /**
+ * Get collections for a library section
+ * GET /api/plex/library/:id/collections
+ */
+router.get('/library/:id/collections',
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const client = await getPlexClient(req.user!.id);
+      const mc = await client.getLibraryCollections(id);
+      res.json(mc);
+    } catch (error: any) {
+      logger.error('Failed to get collections', error);
+      next(new AppError(error.message || 'Failed to get collections', 500));
+    }
+  }
+);
+
+/**
  * Generic directory fetch under /library
  * GET /api/plex/dir/*
  */
