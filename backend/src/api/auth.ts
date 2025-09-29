@@ -82,7 +82,7 @@ async function normalizeAndPersistServers(userId: string, clientId: string): Pro
 
       const publicAddress = connections.find((c: any) => !c.local && !c.relay)?.address || undefined;
 
-      return {
+      const serverEntry: any = {
         id: srv.clientIdentifier,
         name: srv.name,
         host,
@@ -93,12 +93,31 @@ async function normalizeAndPersistServers(userId: string, clientId: string): Pro
         localAddresses,
         accessToken: encryptForUser(userId, srv.accessToken),
       };
+      return serverEntry;
     });
 
   // Persist to settings
   let settings = await settingsRepository.findOne({ where: { userId } });
   if (!settings) {
     settings = settingsRepository.create({ userId });
+  }
+
+  // Preserve preferredUri if set previously
+  const prev = await settingsRepository.findOne({ where: { userId } });
+  if (prev?.plexServers && Array.isArray(prev.plexServers)) {
+    for (const s of servers) {
+      const match = (prev.plexServers as any[]).find(ps => ps.id === s.id);
+      if (match?.preferredUri) {
+        s.preferredUri = match.preferredUri;
+        // Ensure selected endpoint persists across sync
+        try {
+          const u = new URL(match.preferredUri);
+          s.protocol = (u.protocol.replace(':','') as any);
+          s.host = u.hostname;
+          s.port = parseInt(u.port || '32400', 10);
+        } catch {}
+      }
+    }
   }
 
   settings.plexServers = servers;
@@ -233,14 +252,40 @@ router.get('/plex/pin/:id', async (req: Request, res: Response, next: NextFuncti
         await userRepository.save(user);
       }
 
-      // Create session
-      req.session.userId = user.id;
-      req.session.plexId = user.plexId;
-      req.session.username = user.username;
+      // If already authenticated in this session, avoid re-creating the session record
+      if (req.session.userId === user.id) {
+        // nothing to do
+      } else {
+        // Create session (regenerate to avoid duplicate key races)
+        await new Promise<void>((resolve, reject) => {
+          req.session.regenerate((err) => err ? reject(err) : resolve());
+        });
 
-      await new Promise((resolve, reject) => {
-        req.session.save((err) => err ? reject(err) : resolve(undefined));
-      });
+        req.session.userId = user.id as any;
+        (req.session as any).plexId = user.plexId;
+        (req.session as any).username = user.username;
+
+        try {
+          await new Promise<void>((resolve, reject) => {
+            req.session.save((err) => err ? reject(err) : resolve());
+          });
+        } catch (e: any) {
+          // On duplicate key, try updating via store.set; otherwise ignore
+          const msg = String(e?.message || '');
+          if (/SQLITE_CONSTRAINT/.test(msg)) {
+            logger.warn('Session save duplicate; attempting store.set update');
+            try {
+              await new Promise<void>((resolve, reject) => {
+                (req.session as any).store.set(req.sessionID, req.session, (err: any) => err ? reject(err) : resolve());
+              });
+            } catch (e2) {
+              logger.warn('Session store.set also failed; proceeding without error');
+            }
+          } else {
+            throw e;
+          }
+        }
+      }
 
       logger.info(`User authenticated: ${user.username} (${user.plexId})`);
 

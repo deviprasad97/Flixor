@@ -34,6 +34,7 @@ router.get('/servers',
         host: server.host,
         port: server.port,
         protocol: server.protocol,
+        preferredUri: server.preferredUri,
         owned: server.owned,
         publicAddress: server.publicAddress,
         localAddresses: server.localAddresses,
@@ -44,6 +45,114 @@ router.get('/servers',
     } catch (error: any) {
       logger.error('Failed to get servers', error);
       next(new AppError(error.message || 'Failed to get servers', 500));
+    }
+  }
+);
+
+/**
+ * Get connection candidates for a server (derived from stored addresses)
+ * GET /api/plex/servers/:id/connections
+ */
+router.get('/servers/:id/connections',
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      const settingsRepo = AppDataSource.getRepository(UserSettings);
+      const settings = await settingsRepo.findOne({ where: { userId } });
+
+      if (!settings?.plexServers) throw new AppError('No servers found', 404);
+      const server = settings.plexServers.find((s: any) => s.id === id);
+      if (!server) throw new AppError('Server not found', 404);
+
+      const port = server.port || 32400;
+      const protos: Array<'http'|'https'> = server.protocol === 'https' ? ['https','http'] : ['http','https'];
+      const set = new Set<string>();
+      const add = (proto: string, host?: string) => {
+        if (!host) return;
+        const uri = `${proto}://${host}:${port}`;
+        set.add(uri);
+      };
+      // current
+      add(server.protocol, server.host);
+      // public
+      if (server.publicAddress) protos.forEach(p => add(p, server.publicAddress));
+      // local
+      (server.localAddresses || []).forEach((addr: string) => protos.forEach(p => add(p, addr)));
+
+      const current = `${server.protocol}://${server.host}:${port}`;
+      const preferred = server.preferredUri;
+      const connections = Array.from(set).map(uri => ({
+        uri,
+        isCurrent: uri === current,
+        isPreferred: preferred ? uri === preferred : false,
+      }));
+      res.json({ serverId: id, connections });
+    } catch (error: any) {
+      logger.error('Failed to get server connections', error);
+      next(error instanceof AppError ? error : new AppError('Failed to get connections', 500));
+    }
+  }
+);
+
+/**
+ * Set preferred endpoint for a server (host/port/protocol updated)
+ * POST /api/plex/servers/:id/endpoint { uri: string, test?: boolean }
+ */
+router.post('/servers/:id/endpoint',
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      const { uri, test } = req.body || {};
+      if (!uri || typeof uri !== 'string') throw new AppError('uri is required', 400);
+
+      let u: URL;
+      try { u = new URL(uri); } catch { throw new AppError('Invalid uri', 400); }
+      const protocol = (u.protocol.replace(':','') as 'http'|'https');
+      const host = u.hostname;
+      const port = parseInt(u.port || '32400', 10);
+
+      const settingsRepo = AppDataSource.getRepository(UserSettings);
+      const settings = await settingsRepo.findOne({ where: { userId } });
+      if (!settings) throw new AppError('Settings not found', 404);
+      if (!settings.plexServers) throw new AppError('No servers configured', 400);
+      const idx = settings.plexServers.findIndex((s: any) => s.id === id);
+      if (idx < 0) throw new AppError('Server not found', 404);
+
+      // Update stored endpoint and remember preferred URI
+      settings.plexServers[idx].host = host;
+      settings.plexServers[idx].port = port;
+      settings.plexServers[idx].protocol = protocol;
+      settings.plexServers[idx].preferredUri = uri;
+      await settingsRepo.save(settings);
+
+      // Clear cached client so new base is used
+      clearPlexClients(userId);
+
+      if (test) {
+        try {
+          const client = await getPlexClient(userId, id);
+          const ok = await client.testConnection();
+          if (!ok) throw new Error('Connection failed');
+        } catch (e: any) {
+          throw new AppError('Selected endpoint is unreachable', 400);
+        }
+      }
+
+      res.json({
+        message: 'Endpoint updated',
+        server: {
+          id,
+          host,
+          port,
+          protocol,
+          preferredUri: uri,
+        }
+      });
+    } catch (error: any) {
+      logger.error('Failed to set server endpoint', error);
+      next(error instanceof AppError ? error : new AppError('Failed to set endpoint', 500));
     }
   }
 );

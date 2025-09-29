@@ -71,6 +71,29 @@ class ApiClient {
     return this.request('/auth/validate');
   }
 
+  // Plex servers (backend-managed)
+  async plexServers() {
+    return this.request('/plex/servers');
+  }
+
+  async plexSetCurrentServer(serverId: string) {
+    return this.request('/plex/servers/current', {
+      method: 'POST',
+      body: JSON.stringify({ serverId })
+    });
+  }
+
+  async plexServerConnections(serverId: string) {
+    return this.request(`/plex/servers/${encodeURIComponent(serverId)}/connections`);
+  }
+
+  async plexSetServerEndpoint(serverId: string, uri: string, test = true) {
+    return this.request(`/plex/servers/${encodeURIComponent(serverId)}/endpoint`, {
+      method: 'POST',
+      body: JSON.stringify({ uri, test })
+    });
+  }
+
   // Image proxy methods
   getImageProxyUrl(imageUrl: string, options?: { width?: number; height?: number; quality?: number; format?: string }): string {
     const params = new URLSearchParams({ url: imageUrl });

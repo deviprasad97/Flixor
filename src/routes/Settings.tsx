@@ -19,6 +19,9 @@ export default function Settings() {
   const [auth, setAuth] = useState<{pinId?: number; code?: string}>({});
   const [servers, setServers] = useState<any[]>([]);
   const [selectedServer, setSelectedServer] = useState<any>(initial.plexServer);
+  const [showEndpointsFor, setShowEndpointsFor] = useState<string | null>(null);
+  const [endpoints, setEndpoints] = useState<Record<string, { uri: string; isCurrent: boolean; isPreferred: boolean }[]>>({});
+  const [backendServers, setBackendServers] = useState<any[]>([]);
 
   useEffect(() => {
     saveSettings({ plexBaseUrl: plexUrl, plexToken, tmdbBearer: tmdbKey, traktClientId: traktKey, plexTvToken, watchlistProvider });
@@ -101,6 +104,17 @@ export default function Settings() {
                             forget('plex:');
                             window.dispatchEvent(new CustomEvent('plex-server-changed', { detail: { name: s.name, baseUrl: s.baseUrl } }));
                           }}>Use</button>
+                          <button className="btn" onClick={async()=>{
+                            // Fetch candidate endpoints and show chooser
+                            try {
+                              const sid = s.clientIdentifier;
+                              const data = await apiClient.plexServerConnections(sid);
+                              setEndpoints((prev)=> ({ ...prev, [sid]: (data.connections || data || []) }));
+                              setShowEndpointsFor(sid);
+                            } catch (e) {
+                              alert('Failed to load endpoints');
+                            }
+                          }}>Endpoints…</button>
                         </div>
                       </div>
                     );
@@ -176,6 +190,96 @@ export default function Settings() {
           </div>
         </div>
       </section>
+      {/* Backend-managed servers section */}
+      <section>
+        <h2 className="text-xl font-semibold mb-2">Backend Servers</h2>
+        <div className="rounded-lg ring-1 ring-white/10 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm text-neutral-300">Servers known to the backend (used for library/search).</div>
+            <button className="btn" onClick={async()=>{
+              try {
+                const sv = await apiClient.plexServers();
+                setBackendServers(sv || []);
+              } catch (e) {
+                alert('Failed to load backend servers');
+              }
+            }}>Refresh</button>
+          </div>
+          {backendServers.length === 0 ? (
+            <div className="text-neutral-400 text-sm">No servers loaded. Click Refresh.</div>
+          ) : (
+            <div className="grid gap-2">
+              {backendServers.map((s:any, idx:number)=> (
+                <div key={idx} className="flex items-center justify-between bg-white/5 rounded px-3 py-2">
+                  <div className="text-neutral-200 text-sm">
+                    <div className="font-medium">{s.name}</div>
+                    <div className="text-xs text-neutral-400">{s.protocol}://{s.host}:{s.port} {s.isActive ? '• active' : ''}</div>
+                    {s.preferredUri && (
+                      <div className="text-xs text-green-400">preferred: {s.preferredUri}</div>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    {!s.isActive && (
+                      <button className="btn" onClick={async()=>{
+                        try {
+                          await apiClient.plexSetCurrentServer(s.id);
+                          window.dispatchEvent(new CustomEvent('app-toast', { detail: 'Active server updated' }));
+                          const sv = await apiClient.plexServers();
+                          setBackendServers(sv || []);
+                        } catch (e) {
+                          alert('Failed to set current server');
+                        }
+                      }}>Make Current</button>
+                    )}
+                    <button className="btn" onClick={async()=>{
+                      try {
+                        const data = await apiClient.plexServerConnections(s.id);
+                        setEndpoints((prev)=> ({ ...prev, [s.id]: (data.connections || data || []) }));
+                        setShowEndpointsFor(s.id);
+                      } catch (e) {
+                        alert('Failed to load endpoints');
+                      }
+                    }}>Endpoints…</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+      {showEndpointsFor && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-neutral-900 rounded-lg p-4 w-full max-w-lg ring-1 ring-white/10">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-white font-semibold">Select Endpoint</div>
+              <button className="text-white/70 hover:text-white" onClick={()=> setShowEndpointsFor(null)}>✕</button>
+            </div>
+            <div className="space-y-2 max-h-80 overflow-auto pr-1">
+              {(endpoints[showEndpointsFor] || []).map((c, i)=> (
+                <div key={i} className="flex items-center justify-between bg-white/5 rounded px-3 py-2">
+                  <div className="text-white/90 text-sm break-all">
+                    {c.uri}
+                    {c.isPreferred && <span className="ml-2 text-xs text-green-400">preferred</span>}
+                    {c.isCurrent && <span className="ml-2 text-xs text-blue-400">current</span>}
+                  </div>
+                  <button className="btn" onClick={async()=>{
+                    try {
+                      await apiClient.plexSetServerEndpoint(showEndpointsFor, c.uri, true);
+                      window.dispatchEvent(new CustomEvent('app-toast', { detail: 'Endpoint updated' }));
+                      // Refresh backend servers list to reflect change
+                      try { const sv = await apiClient.plexServers(); setBackendServers(sv || []); } catch {}
+                      setShowEndpointsFor(null);
+                    } catch (e:any) {
+                      alert('Endpoint unreachable');
+                    }
+                  }}>Use</button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 text-xs text-white/60">These endpoints come from your Plex server's advertised addresses (local and public). Choose the one that works best from your network.</div>
+          </div>
+        </div>
+      )}
       <section>
         <h2 className="text-xl font-semibold mb-2">Playback</h2>
         <div className="grid gap-3">

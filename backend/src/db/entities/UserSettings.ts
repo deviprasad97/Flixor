@@ -16,6 +16,7 @@ export class UserSettings {
     owned: boolean;
     publicAddress?: string;
     localAddresses?: string[];
+    preferredUri?: string;
     accessToken: string; // encrypted
   }>;
 
