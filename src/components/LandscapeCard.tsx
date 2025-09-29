@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { loadSettings } from '@/state/settings';
 import { tmdbBestBackdropUrl } from '@/services/tmdb';
 import { plexMetadata, plexFindByGuid } from '@/services/plex';
+import { plexBackendMetadata } from '@/services/plex_backend';
 import { cached } from '@/services/cache';
 import WatchlistButton from '@/components/WatchlistButton';
 
@@ -32,7 +33,8 @@ export default function LandscapeCard({ id, title, image, badge, onClick, layout
     // Attempt Plex -> TMDB mapping for backdrop upgrade if possible (best-effort, cached)
     else if (s.tmdbBearer && id.startsWith('plex:') && s.plexBaseUrl && s.plexToken) {
       const rk = id.replace(/^plex:/,'');
-      plexMetadata({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk).then(async (meta: any) => {
+      const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+      (USE_BACKEND ? plexBackendMetadata(rk) : plexMetadata({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk)).then(async (meta: any) => {
         try {
           const m = meta?.MediaContainer?.Metadata?.[0];
           const guid = (m?.Guid || []).map((g:any)=>String(g.id||''))

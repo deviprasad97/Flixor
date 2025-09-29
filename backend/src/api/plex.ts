@@ -235,6 +235,26 @@ router.get('/search',
 );
 
 /**
+ * Find by GUID across libraries (optional type 1=movie, 2=show)
+ * GET /api/plex/findByGuid?guid=tmdb://1234[&type=1]
+ */
+router.get('/findByGuid',
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const guid = String(req.query.guid || '');
+      const type = req.query.type ? parseInt(String(req.query.type), 10) as 1|2 : undefined;
+      if (!guid) throw new AppError('guid is required', 400);
+      const client = await getPlexClient(req.user!.id);
+      const mc = await client.findByGuid(guid, type);
+      res.json(mc);
+    } catch (error: any) {
+      logger.error('Find by GUID failed', error);
+      next(error instanceof AppError ? error : new AppError('Find by GUID failed', 500));
+    }
+  }
+);
+
+/**
  * Get on deck items
  * GET /api/plex/ondeck
  */

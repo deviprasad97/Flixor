@@ -78,17 +78,22 @@ export function TraktAuth({ onAuthComplete, onAuthError }: TraktAuthProps) {
         try {
           const tokens = await traktPollForToken(code.device_code);
           if (tokens) {
-            // Success!
+            // Success! Persist locally; backend already stored tokens server-side.
             saveTraktTokens(tokens);
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             if (countdownRef.current) clearInterval(countdownRef.current);
 
-            const profile = await traktGetUserProfile(tokens.access_token);
-            setUserProfile(profile);
-            setIsAuthenticating(false);
-            setDeviceCode(null);
-
-            if (onAuthComplete) onAuthComplete();
+            try {
+              const profile = await traktGetUserProfile(tokens.access_token);
+              setUserProfile(profile);
+            } catch (e) {
+              // Don’t block completion if profile fetch races token persistence
+              console.warn('Trakt profile fetch after auth failed; will rely on subsequent checks.', e);
+            } finally {
+              setIsAuthenticating(false);
+              setDeviceCode(null);
+              if (onAuthComplete) onAuthComplete();
+            }
           }
         } catch (err: any) {
           console.error('Poll error:', err);

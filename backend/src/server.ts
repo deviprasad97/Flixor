@@ -21,6 +21,7 @@ import cacheRoutes from './api/cache';
 import imageProxyRoutes from './api/image-proxy';
 import tmdbRoutes from './api/tmdb';
 import plexRoutes from './api/plex';
+import traktRoutes from './api/trakt';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 
@@ -52,7 +53,14 @@ async function startServer() {
       origin: process.env.FRONTEND_URL || 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'X-Requested-With',
+        // Allow legacy Trakt headers if the browser sends them in preflight
+        'trakt-api-key',
+        'trakt-api-version',
+      ],
     }));
 
     // Body parsing
@@ -99,6 +107,7 @@ async function startServer() {
     app.use('/api/image', imageProxyRoutes);
     app.use('/api/tmdb', tmdbRoutes);
     app.use('/api/plex', plexRoutes);
+    app.use('/api/trakt', traktRoutes);
 
     // 404 handler
     app.use((req, res) => {

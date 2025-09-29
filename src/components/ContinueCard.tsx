@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { loadSettings } from '@/state/settings';
 import { tmdbBestBackdropUrl } from '@/services/tmdb';
 import { plexMetadata } from '@/services/plex';
+import { plexBackendMetadata } from '@/services/plex_backend';
 
 type Props = { id: string; title: string; image: string; progress: number; onClick?: (id: string) => void };
 
@@ -26,11 +27,16 @@ export default function ContinueCard({ id, title, image, progress, onClick }: Pr
         }
         if (s.tmdbBearer && id.startsWith('plex:') && s.plexBaseUrl && s.plexToken) {
           const rk = id.replace(/^plex:/, '');
-          const meta: any = await plexMetadata({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk);
+          const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+          const meta: any = USE_BACKEND
+            ? await plexBackendMetadata(rk)
+            : await plexMetadata({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk);
           let m = meta?.MediaContainer?.Metadata?.[0];
           // If this is an episode, prefer the show (grandparent) for TMDB mapping/backdrop
           if (m?.type === 'episode' && m?.grandparentRatingKey) {
-            const showMeta: any = await plexMetadata({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, String(m.grandparentRatingKey));
+            const showMeta: any = USE_BACKEND
+              ? await plexBackendMetadata(String(m.grandparentRatingKey))
+              : await plexMetadata({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, String(m.grandparentRatingKey));
             const sm = showMeta?.MediaContainer?.Metadata?.[0];
             if (sm) m = sm;
           }

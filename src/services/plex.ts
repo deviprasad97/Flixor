@@ -1,6 +1,8 @@
 export type PlexConfig = { baseUrl: string; token: string };
 import { cached } from './cache';
+import { plexBackendFindByGuid } from './plex_backend';
 import { loadSettings } from '@/state/settings';
+import { plexBackendLibraries, plexBackendLibraryAll } from './plex_backend';
 
 export async function plexLibs(cfg: PlexConfig) {
   const url = `${cfg.baseUrl}/library/sections?X-Plex-Token=${cfg.token}`;
@@ -162,8 +164,13 @@ export async function plexComprehensiveGuidSearch(cfg: PlexConfig, guids: string
 }
 
 export async function plexFindByGuid(cfg: PlexConfig, guid: string, typeNum?: 1|2) {
+  // If backend flag is enabled, delegate to backend to avoid direct plex.direct calls
+  const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+  if (USE_BACKEND) {
+    return plexBackendFindByGuid(guid, typeNum);
+  }
 
-  // Try searching in all library sections if global search fails
+  // Legacy direct mode
   return cached(`plex:${encodeURIComponent(cfg.baseUrl)}:guid:${guid}:${typeNum ?? 0}`, 30 * 60 * 1000, async () => {
     // First try global search
     try {
@@ -361,16 +368,18 @@ export async function plexRecentlyAdded(days: number = 7, limitPerLib: number = 
   try {
     const s = loadSettings();
     if (!s.plexBaseUrl || !s.plexToken) return [];
+    const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
     const cfg = { baseUrl: s.plexBaseUrl!, token: s.plexToken! };
-    const libs: any = await plexLibs(cfg);
+    const libs: any = USE_BACKEND ? await plexBackendLibraries() : await plexLibs(cfg);
     const dirs = libs?.MediaContainer?.Directory || [];
     const since = Date.now() - days * 24 * 60 * 60 * 1000;
     const all: any[] = [];
     for (const d of dirs) {
       if (d.type !== 'movie' && d.type !== 'show') continue;
       try {
-        const qs = `?type=${d.type === 'movie' ? 1 : 2}&sort=addedAt:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=${limitPerLib}`;
-        const res: any = await plexSectionAll(cfg, String(d.key), qs);
+        const res: any = USE_BACKEND
+          ? await plexBackendLibraryAll(String(d.key), { type: d.type === 'movie' ? 1 : 2, sort: 'addedAt:desc', offset: 0, limit: limitPerLib })
+          : await plexSectionAll(cfg, String(d.key), `?type=${d.type === 'movie' ? 1 : 2}&sort=addedAt:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=${limitPerLib}`);
         const meta: any[] = res?.MediaContainer?.Metadata || [];
         for (const m of meta) {
           const added = (m.addedAt ? (Number(m.addedAt) * 1000) : 0);
@@ -391,8 +400,9 @@ export async function plexPopular(limitPerLib: number = 50): Promise<any[]> {
   try {
     const s = loadSettings();
     if (!s.plexBaseUrl || !s.plexToken) return [];
+    const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
     const cfg = { baseUrl: s.plexBaseUrl!, token: s.plexToken! };
-    const libs: any = await plexLibs(cfg);
+    const libs: any = USE_BACKEND ? await plexBackendLibraries() : await plexLibs(cfg);
     const dirs = libs?.MediaContainer?.Directory || [];
     const all: any[] = [];
     for (const d of dirs) {
@@ -400,13 +410,15 @@ export async function plexPopular(limitPerLib: number = 50): Promise<any[]> {
       let res: any = null;
       // Try lastViewedAt first, then viewCount
       try {
-        const qs = `?type=${d.type === 'movie' ? 1 : 2}&sort=lastViewedAt:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=${limitPerLib}`;
-        res = await plexSectionAll(cfg, String(d.key), qs);
+        res = USE_BACKEND
+          ? await plexBackendLibraryAll(String(d.key), { type: d.type === 'movie' ? 1 : 2, sort: 'lastViewedAt:desc', offset: 0, limit: limitPerLib })
+          : await plexSectionAll(cfg, String(d.key), `?type=${d.type === 'movie' ? 1 : 2}&sort=lastViewedAt:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=${limitPerLib}`);
       } catch {}
       if (!res) {
         try {
-          const qs2 = `?type=${d.type === 'movie' ? 1 : 2}&sort=viewCount:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=${limitPerLib}`;
-          res = await plexSectionAll(cfg, String(d.key), qs2);
+          res = USE_BACKEND
+            ? await plexBackendLibraryAll(String(d.key), { type: d.type === 'movie' ? 1 : 2, sort: 'viewCount:desc', offset: 0, limit: limitPerLib })
+            : await plexSectionAll(cfg, String(d.key), `?type=${d.type === 'movie' ? 1 : 2}&sort=viewCount:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=${limitPerLib}`);
         } catch {}
       }
       const meta: any[] = res?.MediaContainer?.Metadata || [];

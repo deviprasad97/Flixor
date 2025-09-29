@@ -2,10 +2,12 @@ import { loadSettings, saveSettings } from '@/state/settings';
 import { cached } from '@/services/cache';
 
 
-// Use proxy in development to avoid CORS
-const TRAKT = import.meta.env.DEV ? '/api/trakt' : 'https://api.trakt.tv';
-const CLIENT_ID = '4ab0ead6d5510bf39180a5e1dd7b452f5ad700b7794564befdd6bca56e0f7ce4';
-const CLIENT_SECRET = '64d24f12e4628dcf0dda74a61f2235c086daaf8146384016b6a86c196e419c26';
+// Always use backend proxy for Trakt
+const BACKEND_BASE = 'http://localhost:3001';
+const TRAKT = `${BACKEND_BASE}/api/trakt`;
+// Keep client constants unused to avoid exposing secrets in the browser
+const CLIENT_ID = '';
+const CLIENT_SECRET = '';
 
 export interface TraktDeviceCode {
   device_code: string;
@@ -91,17 +93,11 @@ export interface TraktEpisode {
 
 // Authentication
 export async function traktRequestDeviceCode(): Promise<TraktDeviceCode> {
-  // Web fallback - use proxy in dev
-
-  // Web fallback - use proxy in dev
   const response = await fetch(`${TRAKT}/oauth/device/code`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      client_id: CLIENT_ID
-    })
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
   });
 
   if (!response.ok) {
@@ -112,31 +108,54 @@ export async function traktRequestDeviceCode(): Promise<TraktDeviceCode> {
 }
 
 export async function traktPollForToken(deviceCode: string): Promise<TraktTokens | null> {
-  // Web fallback
-
-  // Web fallback
   const response = await fetch(`${TRAKT}/oauth/device/token`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      code: deviceCode,
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET
-    })
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: deviceCode })
   });
 
-  if (response.status === 400) {
-    // Still pending authorization
-    return null;
-  }
-
-  if (!response.ok) {
+  // If backend is down or route missing
+  if (!response.ok && response.status !== 400) {
     throw new Error(`Failed to poll token: ${response.status}`);
   }
 
-  return response.json();
+  // Backend returns 200 with { ok:false, error } while pending
+  // or { ok:true, tokens } when authorized.
+  let data: any = null;
+  try {
+    data = await response.json();
+  } catch {
+    // If server ever returns empty body on 400 pending
+    if (response.status === 400) return null;
+    throw new Error('Failed to parse token response');
+  }
+
+  // Pending or temporary states
+  if (data && data.ok === false) {
+    const err = String(data.error || 'authorization_pending');
+    if (err === 'expired_token') {
+      // Signal caller to stop polling and restart
+      throw new Error('device_code_expired');
+    }
+    if (err === 'access_denied' || err === 'invalid_grant' || err === 'invalid_client') {
+      throw new Error(err);
+    }
+    // Treat authorization_pending / slow_down / temporarily_unavailable / server_error as pending
+    return null;
+  }
+
+  // Success envelope from backend
+  if (data && data.ok === true && data.tokens) {
+    return data.tokens as TraktTokens;
+  }
+
+  // In case backend returns raw Trakt tokens directly
+  if (data && data.access_token) {
+    return data as TraktTokens;
+  }
+
+  throw new Error('Unexpected token response');
 }
 
 export async function traktRefreshToken(refreshToken: string): Promise<TraktTokens> {
@@ -185,17 +204,9 @@ export async function traktRevokeToken(accessToken: string): Promise<void> {
 }
 
 // User
-export async function traktGetUserProfile(accessToken: string): Promise<TraktUser> {
-  // Web-only
-
-  // Web fallback
-  const response = await fetch(`${TRAKT}/users/me`, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'trakt-api-version': '2',
-      'trakt-api-key': CLIENT_ID
-    }
-  });
+export async function traktGetUserProfile(_accessToken: string): Promise<TraktUser> {
+  // Use backend + session cookie
+  const response = await fetch(`${TRAKT}/users/me`, { credentials: 'include' });
 
   if (!response.ok) {
     throw new Error(`Failed to get user profile: ${response.status}`);
@@ -205,94 +216,28 @@ export async function traktGetUserProfile(accessToken: string): Promise<TraktUse
 }
 
 export async function traktGetUserSettings(accessToken: string): Promise<any> {
-  // Web-only
-
-  // Web fallback
-  const response = await fetch(`${TRAKT}/users/settings`, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'trakt-api-version': '2',
-      'trakt-api-key': CLIENT_ID
-    }
-  });
-
+  const response = await fetch(`${TRAKT}/users/me`, { credentials: 'include' });
+  
   if (!response.ok) {
     throw new Error(`Failed to get user settings: ${response.status}`);
   }
-
+  
   return response.json();
 }
 
 // Scrobbling
-export async function traktScrobbleStart(accessToken: string, item: TraktScrobble): Promise<any> {
-  // Web-only
+export async function traktScrobbleStart(accessToken: string, item: TraktScrobble): Promise<any> { throw new Error('Trakt scrobble not supported via backend'); }
 
-  const response = await fetch(`${TRAKT}/scrobble/start`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      'trakt-api-version': '2',
-      'trakt-api-key': CLIENT_ID
-    },
-    body: JSON.stringify(item)
-  });
+export async function traktScrobblePause(accessToken: string, item: TraktScrobble): Promise<any> { throw new Error('Trakt scrobble not supported via backend'); }
 
-  if (!response.ok) throw new Error(`Failed to start scrobble: ${response.status}`);
-  return response.json();
-}
-
-export async function traktScrobblePause(accessToken: string, item: TraktScrobble): Promise<any> {
-  // Web-only
-
-  const response = await fetch(`${TRAKT}/scrobble/pause`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      'trakt-api-version': '2',
-      'trakt-api-key': CLIENT_ID
-    },
-    body: JSON.stringify(item)
-  });
-
-  if (!response.ok) throw new Error(`Failed to pause scrobble: ${response.status}`);
-  return response.json();
-}
-
-export async function traktScrobbleStop(accessToken: string, item: TraktScrobble): Promise<any> {
-  // Web-only
-
-  const response = await fetch(`${TRAKT}/scrobble/stop`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      'trakt-api-version': '2',
-      'trakt-api-key': CLIENT_ID
-    },
-    body: JSON.stringify(item)
-  });
-
-  if (!response.ok) throw new Error(`Failed to stop scrobble: ${response.status}`);
-  return response.json();
-}
+export async function traktScrobbleStop(accessToken: string, item: TraktScrobble): Promise<any> { throw new Error('Trakt scrobble not supported via backend'); }
 
 // History
 export async function traktGetHistory(accessToken: string, type?: 'movies' | 'shows', limit?: number): Promise<any[]> {
-  // Web-only
-
   let url = `${TRAKT}/users/me/history`;
   if (type) url += `/${type}`;
   if (limit) url += `?limit=${limit}`;
-
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'trakt-api-version': '2',
-      'trakt-api-key': CLIENT_ID
-    }
-  });
+  const response = await fetch(url, { credentials: 'include' });
 
   if (!response.ok) throw new Error(`Failed to get history: ${response.status}`);
   return response.json();
@@ -336,34 +281,19 @@ export async function traktRemoveFromHistory(accessToken: string, items: any[]):
 
 // Watchlist
 export async function traktGetWatchlist(accessToken: string, type?: 'movies' | 'shows'): Promise<any[]> {
-  // Web-only
-
   let url = `${TRAKT}/users/me/watchlist`;
   if (type) url += `/${type}`;
-
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'trakt-api-version': '2',
-      'trakt-api-key': CLIENT_ID
-    }
-  });
+  const response = await fetch(url, { credentials: 'include' });
 
   if (!response.ok) throw new Error(`Failed to get watchlist: ${response.status}`);
   return response.json();
 }
 
 export async function traktAddToWatchlist(accessToken: string, items: any[]): Promise<any> {
-  // Web-only
-
-  const response = await fetch(`${TRAKT}/sync/watchlist`, {
+  const response = await fetch(`${TRAKT}/watchlist`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      'trakt-api-version': '2',
-      'trakt-api-key': CLIENT_ID
-    },
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(items)
   });
 
@@ -372,16 +302,10 @@ export async function traktAddToWatchlist(accessToken: string, items: any[]): Pr
 }
 
 export async function traktRemoveFromWatchlist(accessToken: string, items: any[]): Promise<any> {
-  // Web-only
-
-  const response = await fetch(`${TRAKT}/sync/watchlist/remove`, {
+  const response = await fetch(`${TRAKT}/watchlist/remove`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      'trakt-api-version': '2',
-      'trakt-api-key': CLIENT_ID
-    },
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(items)
   });
 
@@ -391,18 +315,9 @@ export async function traktRemoveFromWatchlist(accessToken: string, items: any[]
 
 // Progress
 export async function traktGetProgress(accessToken: string, type: 'shows', sort?: string): Promise<any[]> {
-  // Web-only
-
   let url = `${TRAKT}/users/me/watched/${type}/progress`;
   if (sort) url += `?sort=${sort}`;
-
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'trakt-api-version': '2',
-      'trakt-api-key': CLIENT_ID
-    }
-  });
+  const response = await fetch(url, { credentials: 'include' });
 
   if (!response.ok) throw new Error(`Failed to get progress: ${response.status}`);
   return response.json();
@@ -410,17 +325,9 @@ export async function traktGetProgress(accessToken: string, type: 'shows', sort?
 
 // Recommendations
 export async function traktGetRecommendations(accessToken: string, type: 'movies' | 'shows', limit?: number): Promise<any[]> {
-
   let url = `${TRAKT}/recommendations/${type}`;
   if (limit) url += `?limit=${limit}`;
-
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'trakt-api-version': '2',
-      'trakt-api-key': CLIENT_ID
-    }
-  });
+  const response = await fetch(url, { credentials: 'include' });
 
   if (!response.ok) throw new Error(`Failed to get recommendations: ${response.status}`);
   return response.json();
@@ -428,17 +335,10 @@ export async function traktGetRecommendations(accessToken: string, type: 'movies
 
 // Search
 export async function traktSearch(query: string, type?: 'movie' | 'show' | 'episode', limit?: number): Promise<any[]> {
-
   const searchType = type || 'movie,show';
   let url = `${TRAKT}/search/${searchType}?query=${encodeURIComponent(query)}`;
   if (limit) url += `&limit=${limit}`;
-
-  const response = await fetch(url, {
-    headers: {
-      'trakt-api-version': '2',
-      'trakt-api-key': CLIENT_ID
-    }
-  });
+  const response = await fetch(url, { credentials: 'include' });
 
   if (!response.ok) throw new Error(`Failed to search: ${response.status}`);
   return response.json();
@@ -446,16 +346,9 @@ export async function traktSearch(query: string, type?: 'movie' | 'show' | 'epis
 
 // Trending (existing, updated)
 export async function traktTrending(type: 'movies'|'shows' = 'movies', limit?: number): Promise<any[]> {
-
-  let url = `${TRAKT}/${type}/trending`;
+  let url = `${TRAKT}/trending/${type}`;
   if (limit) url += `?limit=${limit}`;
-
-  const response = await fetch(url, {
-    headers: {
-      'trakt-api-version': '2',
-      'trakt-api-key': CLIENT_ID
-    }
-  });
+  const response = await fetch(url, { credentials: 'include' });
 
   if (!response.ok) throw new Error(`Failed to get trending: ${response.status}`);
   return response.json();
@@ -463,16 +356,9 @@ export async function traktTrending(type: 'movies'|'shows' = 'movies', limit?: n
 
 // Popular
 export async function traktPopular(type: 'movies' | 'shows', limit?: number): Promise<any[]> {
-
-  let url = `${TRAKT}/${type}/popular`;
+  let url = `${TRAKT}/popular/${type}`;
   if (limit) url += `?limit=${limit}`;
-
-  const response = await fetch(url, {
-    headers: {
-      'trakt-api-version': '2',
-      'trakt-api-key': CLIENT_ID
-    }
-  });
+  const response = await fetch(url, { credentials: 'include' });
 
   if (!response.ok) throw new Error(`Failed to get popular: ${response.status}`);
   return response.json();

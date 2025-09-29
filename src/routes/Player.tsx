@@ -72,7 +72,9 @@ export default function Player() {
         if (s.plexBaseUrl && s.plexToken) {
           const rk = decoded.replace(/^plex:/, '');
           try {
-            const meta: any = await plexMetadata({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk);
+            const meta: any = USE_BACKEND
+              ? await (await import('@/services/plex_backend')).plexBackendMetadata(rk)
+              : await plexMetadata({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, rk);
             const m = meta?.MediaContainer?.Metadata?.[0];
             if (m) {
               setTitle(m.title || m.grandparentTitle || '');
@@ -84,7 +86,9 @@ export default function Player() {
               setRatingKey(String(m.ratingKey));
               // Fetch markers (intro, credits)
               try {
-                const mark: any = await plexMetadataWithMarkers({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, String(m.ratingKey));
+                const mark: any = USE_BACKEND
+                  ? await (await import('@/services/plex_backend')).plexBackendMetadataWithExtras(String(m.ratingKey))
+                  : await plexMetadataWithMarkers({ baseUrl: s.plexBaseUrl!, token: s.plexToken! }, String(m.ratingKey));
                 const mm = mark?.MediaContainer?.Metadata?.[0];
                 const list = (mm?.Marker || []).map((mk: any) => ({ type: String(mk.type||''), start: (mk.start||0)/1000, end: (mk.end||0)/1000 }));
                 setMarkers(list);

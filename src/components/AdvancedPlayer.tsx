@@ -250,7 +250,10 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
         hasRetriedWithTranscode.current = false; // Reset retry flag when loading new content
         
         // Load metadata
-        const metaResponse = await plexMetadata(plexConfig, itemId);
+        const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
+        const metaResponse = USE_BACKEND
+          ? await (await import('@/services/plex_backend')).plexBackendMetadata(itemId)
+          : await plexMetadata(plexConfig, itemId);
         const meta = metaResponse.MediaContainer.Metadata[0] as PlexMetadata;
         setMetadata(meta);
         
@@ -287,8 +290,6 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
           // Clear message after delay
           setTimeout(() => setCodecErrorMessage(null), 5000);
         }
-
-        const USE_BACKEND = (import.meta as any).env?.VITE_USE_BACKEND_PLEX === 'true' || (import.meta as any).env?.VITE_USE_BACKEND_PLEX === true;
 
         if (USE_BACKEND) {
           // Use backend to generate proxied stream URL (HLS)

@@ -299,6 +299,53 @@ export class PlexClient {
   }
 
   /**
+   * Find items by GUID across libraries (optionally restricted by type)
+   * Mirrors Plex Web behavior: try global /library/all?guid= first, then per-section fallback.
+   */
+  async findByGuid(guid: string, type?: 1 | 2) {
+    // Try global search first
+    try {
+      const params = new URLSearchParams({ guid });
+      if (type) params.set('type', String(type));
+      const data = await this.cachedRequest<any>(
+        `/library/all?${params.toString()}`,
+        `${this.server.id}:guid:${guid}:${type || 0}:global`,
+        1800
+      );
+      const meta = data?.MediaContainer?.Metadata || [];
+      if (meta.length > 0) return data.MediaContainer;
+    } catch {}
+
+    // Fallback: iterate sections (optionally filtering by type)
+    try {
+      const libs = await this.cachedRequest<any>(
+        '/library/sections',
+        `${this.server.id}:libs`,
+        1800
+      );
+      const sections: any[] = libs?.MediaContainer?.Directory || [];
+      const filtered = type
+        ? sections.filter((s) => (type === 1 && s.type === 'movie') || (type === 2 && s.type === 'show'))
+        : sections;
+
+      for (const s of filtered) {
+        try {
+          const p = `/library/sections/${s.key}/all?guid=${encodeURIComponent(guid)}`;
+          const data = await this.cachedRequest<any>(
+            p,
+            `${this.server.id}:guid:${guid}:${type || 0}:section:${s.key}`,
+            1800
+          );
+          const meta = data?.MediaContainer?.Metadata || [];
+          if (meta.length > 0) return data.MediaContainer;
+        } catch {}
+      }
+    } catch {}
+
+    return { Metadata: [] };
+  }
+
+  /**
    * Get metadata with optional params (includeExtras, includeExternalMedia, includeChildren)
    */
   async getMetadataWithParams(ratingKey: string, params?: Record<string, any>) {

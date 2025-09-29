@@ -70,3 +70,8 @@ export async function plexBackendSearch(query: string, type?: 1 | 2) {
   const items = await backendFetch<any[]>(`/search`, type ? { query, type } : { query });
   return { MediaContainer: { Metadata: items || [] } };
 }
+
+export async function plexBackendFindByGuid(guid: string, type?: 1 | 2) {
+  const mc = await backendFetch<any>('/findByGuid', type ? { guid, type } : { guid });
+  return { MediaContainer: mc };
+}
