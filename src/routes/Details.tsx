@@ -21,6 +21,8 @@ import EpisodeSkeletonList from '@/components/EpisodeSkeletonList';
 import SkeletonRow from '@/components/SkeletonRow';
 import TrackPicker, { Track } from '@/components/TrackPicker';
 import BrowseModal from '@/components/BrowseModal';
+import RatingsBar from '@/components/RatingsBar';
+import { fetchPlexRatingsByRatingKey, fetchPlexVodRatingsById } from '@/services/ratings';
 
 export default function Details() {
   let { id } = useParams();
@@ -59,6 +61,8 @@ export default function Details() {
   const [showTrailer, setShowTrailer] = useState<boolean>(false);
   const [plexTrailerUrl, setPlexTrailerUrl] = useState<string | undefined>(undefined);
   const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
+  const [imdbId, setImdbId] = useState<string | undefined>(undefined);
+  const [externalRatings, setExternalRatings] = useState<{ imdb?: { rating?: number; votes?: number } | null; rt?: { critic?: number; audience?: number } | null } | null>(null);
   const [showMediaInfo, setShowMediaInfo] = useState<boolean>(false);
   const [moodTags, setMoodTags] = useState<string[]>([]);
   const [plexMappedId, setPlexMappedId] = useState<string | undefined>(undefined);
@@ -106,6 +110,11 @@ export default function Details() {
             if (m.year) setYear(String(m.year));
             try { setMoodTags(deriveTags((m.Genre||[]).map((g:any)=>g.tag))); } catch {}
             setCast((m.Role || []).slice(0, 12).map((r: any) => ({ name: r.tag, img: apiClient.getPlexImageNoToken(r.thumb || '') })));
+            // Fetch ratings directly from Plex for plex items
+            try {
+              const r = await (await import('@/services/ratings')).fetchPlexRatingsByRatingKey(rk);
+              if (r) setExternalRatings({ imdb: r.imdb || undefined, rt: r.rt || undefined });
+            } catch {}
             // Badges detection
             const bs: string[] = [];
             const media = (m.Media || [])[0];
@@ -173,10 +182,18 @@ export default function Details() {
             const imdbGuid = (m.Guid || []).map((g:any)=>String(g.id||''))
               .find((g:string)=>g.includes('imdb://'));
             setWatchIds({ tmdbId: tmdbGuid ? tmdbGuid.split('://')[1] : undefined, imdbId: imdbGuid ? imdbGuid.split('://')[1] : undefined, plexKey: String(m.ratingKey||''), media: (m.type==='movie'?'movie':'tv') });
+            if (imdbGuid) {
+              try { setImdbId(imdbGuid.split('://')[1]); } catch {}
+            }
             if (s.tmdbBearer && tmdbGuid) {
               const tid = tmdbGuid.split('://')[1];
               const mediaType = (m.type === 'movie') ? 'movie' : 'tv';
               setKind(mediaType);
+              // Also fetch external IDs to get IMDb id when available
+              try {
+                const exIds: any = await tmdbExternalIds(s.tmdbBearer!, mediaType as any, tid);
+                if (exIds?.imdb_id) setImdbId(exIds.imdb_id);
+              } catch {}
               setTmdbCtx({ media: mediaType as any, id: String(tid) });
                 try {
                   const d: any = await tmdbDetails(s.tmdbBearer!, mediaType as any, tid);
@@ -376,6 +393,11 @@ export default function Details() {
                   // Replace backdrop with plex art for authenticity and add badges
                   const m = match;
                   setPlexMappedId(`plex:${String(m.ratingKey)}`);
+                  // Fetch ratings for mapped Plex item
+                  try {
+                    const r = await (await import('@/services/ratings')).fetchPlexRatingsByRatingKey(String(m.ratingKey));
+                    if (r) setExternalRatings({ imdb: r.imdb || undefined, rt: r.rt || undefined });
+                  } catch {}
                   setBackdrop(apiClient.getPlexImageNoToken((m.art || m.thumb || m.parentThumb || m.grandparentThumb) || '') || backdrop);
                   const extra: string[] = [];
                   const media0 = (m.Media || [])[0];
@@ -441,6 +463,21 @@ export default function Details() {
       } catch (e) { console.error(e); }
     }
     load();
+  }, [id]);
+
+  // Fetch VOD ratings automatically if Details id denotes a VOD item (plexvod:<id>)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!id || !id.startsWith('plexvod:')) return;
+      const vid = id.replace(/^plexvod:/, '');
+      try {
+        const r = await fetchPlexVodRatingsById(vid);
+        if (!alive) return;
+        if (r) setExternalRatings({ imdb: r.imdb || undefined, rt: r.rt || undefined });
+      } catch {}
+    })();
+    return () => { alive = false; };
   }, [id]);
 
   // Load episodes when a season is picked (Plex)
@@ -523,6 +560,7 @@ export default function Details() {
         runtime={meta.runtime}
         genres={meta.genres}
         badges={badges}
+        ratings={externalRatings || undefined}
         cast={cast}
         moodTags={moodTags}
         kind={kind}
@@ -560,6 +598,8 @@ export default function Details() {
         onToggleMute={toggleMute}
       />
       </div>
+
+      {/* Ratings now inline with metadata row in DetailsHero */}
 
       {/* Tabs Navigation */}
       <DetailsTabs

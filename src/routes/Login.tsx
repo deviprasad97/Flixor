@@ -80,48 +80,74 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-black">
-      <div className="max-w-md w-full mx-4">
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-2xl">
-          {/* Logo/Title */}
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-white mb-2">Plex Media Player</h1>
-            <p className="text-gray-400">Sign in with your Plex account</p>
-          </div>
+    <div className="min-h-screen relative flex items-center justify-center">
+      {/* Branded background */}
+      <div className="app-bg-fixed bg-home-gradient" />
 
-          {/* Status Message */}
-          <div className="mb-6 text-center">
-            <p className="text-sm text-gray-300">{status}</p>
-          </div>
-
-          {/* Sign In Button */}
-          {!isAuthenticating ? (
-            <button
-              onClick={startPlexAuth}
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
-            >
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M4 2C2.9 2 2 2.9 2 4V20C2 21.1 2.9 22 4 22H20C21.1 22 22 21.1 22 20V4C22 2.9 21.1 2 20 2H4M8 8L16 12L8 16V8Z"/>
-              </svg>
-              Sign in with Plex
-            </button>
-          ) : (
-            <div className="flex justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+      <div className="w-full max-w-6xl mx-auto px-6 py-12 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+        {/* Brand panel */}
+        <div className="hidden md:block">
+          <div className="relative">
+            <div className="absolute -inset-6 rounded-3xl bg-gradient-to-br from-white/10 to-white/0 blur-2xl" />
+            <div className="relative z-10">
+              <div className="inline-flex items-baseline gap-2 mb-4">
+                <span className="text-5xl font-extrabold tracking-tight text-brand">FLIXOR</span>
+                <span className="text-sm px-2 py-1 rounded bg-white/10 text-white/80 align-middle">web</span>
+              </div>
+              <h2 className="text-2xl md:text-3xl text-white/90 font-semibold leading-tight mb-4">A Netflix‑quality Plex client</h2>
+              <p className="text-neutral-300/90 text-sm leading-6 max-w-md">
+                Sign in with Plex to access your libraries, resume playback, and sync your watch activity. Secure OAuth via your Plex account.
+              </p>
             </div>
-          )}
+          </div>
+        </div>
 
-          {/* Help Text */}
-          <div className="mt-8 text-center text-xs text-gray-500">
-            <p>Don't have a Plex account?</p>
-            <a
-              href="https://www.plex.tv/sign-up"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-orange-500 hover:text-orange-400 underline"
-            >
-              Create one for free
-            </a>
+        {/* Auth card */}
+        <div className="max-w-md w-full md:ml-auto">
+          <div className="bg-neutral-900/50 rounded-2xl ring-1 ring-white/10 backdrop-blur-md p-8 shadow-2xl">
+            {/* Logo/Title */}
+            <div className="text-left mb-8 md:mb-10">
+              <div className="md:hidden mb-3">
+                <span className="text-4xl font-extrabold tracking-tight text-brand">FLIXOR</span>
+              </div>
+              <h1 className="text-2xl font-semibold text-white">Sign in</h1>
+              <p className="text-sm text-neutral-400">Use your Plex account to continue</p>
+            </div>
+
+            {/* Status Message */}
+            <div className="mb-6">
+              <p className="text-xs text-neutral-300/90">{status}</p>
+            </div>
+
+            {/* Sign In Button */}
+            {!isAuthenticating ? (
+              <button
+                onClick={startPlexAuth}
+                className="w-full btn-primary h-11 px-6 rounded-lg font-semibold flex items-center justify-center gap-2 shadow-md"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M4 2C2.9 2 2 2.9 2 4V20C2 21.1 2.9 22 4 22H20C21.1 22 22 21.1 22 20V4C22 2.9 21.1 2 20 2H4M8 8L16 12L8 16V8Z"/>
+                </svg>
+                Continue with Plex
+              </button>
+            ) : (
+              <div className="flex justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand"></div>
+              </div>
+            )}
+
+            {/* Help Text */}
+            <div className="mt-8 text-center text-xs text-neutral-500">
+              <p>Don&apos;t have a Plex account?</p>
+              <a
+                href="https://www.plex.tv/sign-up"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-brand hover:text-brand-600 underline"
+              >
+                Create one for free
+              </a>
+            </div>
           </div>
         </div>
       </div>

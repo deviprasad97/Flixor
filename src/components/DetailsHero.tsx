@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import RatingsBar from '@/components/RatingsBar';
 import { useNavigate } from 'react-router-dom';
 
 interface DetailsHeroProps {
@@ -12,6 +13,7 @@ interface DetailsHeroProps {
   runtime?: number;
   genres?: string[];
   badges?: string[];
+  ratings?: { imdb?: { rating?: number; votes?: number } | null; rt?: { critic?: number; audience?: number } | null } | null;
   cast?: Array<{ id?: string; name: string; img?: string }>;
   moodTags?: string[];
   kind?: 'movie' | 'tv';
@@ -59,6 +61,7 @@ export default function DetailsHero({
   runtime,
   genres = [],
   badges = [],
+  ratings,
   cast = [],
   moodTags = [],
   kind,
@@ -246,7 +249,7 @@ export default function DetailsHero({
             )}
           </div>
 
-          {/* Metadata Row */}
+          {/* Metadata Row (inline ratings) */}
           <div className="flex flex-wrap items-center gap-3 mb-6 text-sm md:text-base">
             {metaBadges.map((badge, i) => (
               <span key={i} className="text-white/90 font-medium">
@@ -264,6 +267,11 @@ export default function DetailsHero({
                 {badge}
               </span>
             ))}
+            {ratings && (ratings.imdb || ratings.rt) && (
+              <div className="inline-flex items-center gap-3">
+                <RatingsBar imdb={ratings.imdb || undefined} rt={ratings.rt || undefined} />
+              </div>
+            )}
           </div>
 
           {/* Overview */}

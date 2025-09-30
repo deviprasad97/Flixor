@@ -9,6 +9,7 @@ export default function App() {
   const isPlayerRoute = location.pathname.includes('/player/');
   const isDetailsRoute = location.pathname.includes('/details/');
   const isHome = location.pathname === '/';
+  const isAuthRoute = location.pathname.startsWith('/login');
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -34,8 +35,8 @@ export default function App() {
       {/* Global fixed background layer */}
       <div className="app-bg-fixed bg-home-gradient" />
       <GlobalToast />
-      {!isPlayerRoute && <TopNav />}
-      <main className={`flex-1 ${!isPlayerRoute && !isHome && !isDetailsRoute ? 'pt-16' : ''}`}>
+      {!isPlayerRoute && !isAuthRoute && <TopNav />}
+      <main className={`flex-1 ${!isPlayerRoute && !isHome && !isDetailsRoute && !isAuthRoute ? 'pt-16' : ''}`}>
         <Outlet />
       </main>
     </div>

@@ -5,6 +5,9 @@ import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { createLogger } from '../utils/logger';
 import { AppDataSource } from '../db/data-source';
 import { UserSettings } from '../db/entities';
+import axios from 'axios';
+import { User } from '../db/entities';
+import { decryptForUser, isEncrypted } from '../utils/crypto';
 
 const router = Router();
 const logger = createLogger('plex-api');
@@ -45,6 +48,55 @@ router.get('/servers',
     } catch (error: any) {
       logger.error('Failed to get servers', error);
       next(new AppError(error.message || 'Failed to get servers', 500));
+    }
+  }
+);
+
+/**
+ * Get ratings for a Plex item by ratingKey
+ * GET /api/plex/ratings/:ratingKey
+ */
+router.get('/ratings/:ratingKey',
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const { ratingKey } = req.params;
+      if (!ratingKey) throw new AppError('ratingKey is required', 400);
+      const client = await getPlexClient(req.user!.id);
+      const meta: any = await client.getMetadata(String(ratingKey));
+      const m = meta as any;
+
+      // Normalize ratings
+      let imdb: { rating: number; votes?: number } | null = null;
+      let rtCritic: number | undefined;
+      let rtAudience: number | undefined;
+
+      try {
+        const arr: any[] = Array.isArray((m as any).Rating) ? (m as any).Rating : [];
+        for (const r of arr) {
+          const img = String(r.image || '').toLowerCase();
+          const val = typeof r.value === 'number' ? r.value : (r.value ? Number(r.value) : undefined);
+          if (img.startsWith('imdb://') && val != null) {
+            imdb = { rating: val };
+          } else if (img.startsWith('rottentomatoes://') && val != null) {
+            const v10 = Math.round(val * 10);
+            if (String(r.type).toLowerCase() === 'critic') rtCritic = v10; else rtAudience = v10;
+          }
+        }
+        // Alternative sources
+        if ((m as any).imdbRatingCount && imdb) {
+          const votes = Number((m as any).imdbRatingCount);
+          if (!Number.isNaN(votes)) imdb.votes = votes;
+        }
+        if ((m as any).audienceRating && rtAudience == null) {
+          const v10 = Math.round(Number((m as any).audienceRating) * 10);
+          if (!Number.isNaN(v10)) rtAudience = v10;
+        }
+      } catch {}
+
+      res.json({ imdb, rottenTomatoes: (rtCritic != null || rtAudience != null) ? { critic: rtCritic, audience: rtAudience } : null });
+    } catch (error: any) {
+      logger.error('Failed to get ratings', error);
+      next(new AppError('Failed to get ratings', 500));
     }
   }
 );
@@ -655,3 +707,67 @@ router.get('/test',
 );
 
 export default router;
+/**
+ * Get ratings from Plex VOD for an item id (Discover/Watch)
+ * GET /api/plex/vod/ratings/:id
+ */
+router.get('/vod/ratings/:id',
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      if (!id) throw new AppError('id is required', 400);
+      // Get Plex account token for current user
+      const userRepo = AppDataSource.getRepository(User);
+      const user = await userRepo.findOne({ where: { id: req.user!.id }, select: ['id', 'plexToken'] });
+      if (!user?.plexToken) throw new AppError('Plex account not authenticated', 401);
+      const accountToken = isEncrypted(user.plexToken) ? decryptForUser(user.id, user.plexToken) : user.plexToken;
+
+      const params = new URLSearchParams({
+        includeReviews: '1',
+        includeExternalMedia: '1',
+        'X-Plex-Product': process.env.PLEX_PRODUCT || 'Plex Web',
+        'X-Plex-Version': process.env.PLEX_VERSION || '4.128.1',
+        'X-Plex-Client-Identifier': process.env.PLEX_CLIENT_ID || 'plex-media-backend',
+        'X-Plex-Platform': 'Web',
+        'X-Plex-Language': 'en',
+      });
+      const url = `https://vod.provider.plex.tv/library/metadata/${encodeURIComponent(id)}?${params.toString()}`;
+      const resp = await axios.get(url, {
+        headers: { 'X-Plex-Token': accountToken, Accept: 'application/json' },
+        timeout: 10000,
+      });
+      const m = resp.data?.MediaContainer?.Metadata?.[0] || {};
+
+      // Normalize ratings as in server endpoint
+      let imdb: { rating: number; votes?: number } | null = null;
+      let rtCritic: number | undefined;
+      let rtAudience: number | undefined;
+      try {
+        const arr: any[] = Array.isArray(m.Rating) ? m.Rating : [];
+        for (const r of arr) {
+          const img = String(r.image || '').toLowerCase();
+          const val = typeof r.value === 'number' ? r.value : (r.value ? Number(r.value) : undefined);
+          if (img.startsWith('imdb://') && val != null) {
+            imdb = { rating: val };
+          } else if (img.startsWith('rottentomatoes://') && val != null) {
+            const v10 = Math.round(val * 10);
+            if (String(r.type).toLowerCase() === 'critic') rtCritic = v10; else rtAudience = v10;
+          }
+        }
+        if (m.imdbRatingCount && imdb) {
+          const votes = Number(m.imdbRatingCount);
+          if (!Number.isNaN(votes)) imdb.votes = votes;
+        }
+        if (m.audienceRating && rtAudience == null) {
+          const v10 = Math.round(Number(m.audienceRating) * 10);
+          if (!Number.isNaN(v10)) rtAudience = v10;
+        }
+      } catch {}
+
+      res.json({ imdb, rottenTomatoes: (rtCritic != null || rtAudience != null) ? { critic: rtCritic, audience: rtAudience } : null });
+    } catch (e: any) {
+      logger.error('Failed to get VOD ratings', e);
+      next(new AppError('Failed to get VOD ratings', 500));
+    }
+  }
+);

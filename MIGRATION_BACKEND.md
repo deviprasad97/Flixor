@@ -4,7 +4,7 @@ This document captures what we have migrated from a frontend‑only app to our b
 
 ## Summary
 
-- Backend (Express + TypeORM + SQLite + Cache) is running and provides TMDB proxy, Plex auth/session, Plex library/search/metadata APIs, image proxy, and progress updates.
+- Backend (Express + TypeORM + SQLite + Cache) is running and provides TMDB proxy, Plex auth/session, Plex library/search/metadata APIs, image proxy, ratings (from Plex), and progress updates.
 - Frontend delegates all Plex reads to the backend. The only direct calls to Plex from the browser are player streaming requests (by design, identical to commit 147b572).
 
 Note: The frontend now uses the backend for Plex reads by default. The old `VITE_USE_BACKEND_PLEX` flag has been removed/ignored and can be deleted from `.env`.
@@ -50,6 +50,12 @@ Note: The frontend now uses the backend for Plex reads by default. The old `VITE
   - Streaming: The frontend requests a stream URL via the backend, which returns a direct Plex URL (decision + `start.mpd/m3u8`). The player then loads that URL directly.
   - Progress: Player reports progress via backend (`/api/plex/progress`).
   - We no longer gate this behind `VITE_USE_BACKEND_PLEX`.
+
+Ratings – IMDb and Rotten Tomatoes via Plex
+- We no longer use OMDb. Ratings are sourced from Plex metadata:
+  - Server items: `GET /api/plex/ratings/:ratingKey` returns IMDb (rating/votes) and Rotten Tomatoes (critic/audience) when available.
+  - VOD/Discover items: `GET /api/plex/vod/ratings/:id` queries `vod.provider.plex.tv` with the user’s Plex account token.
+- UI shows explicit IMDb, RT critic, and RT audience pills under the Details hero.
 
 ## Risks / Notes
 
@@ -148,7 +154,9 @@ Phase 6 – Security & QoL
 - Plex Discover proxy: `backend/src/api/plextv.ts`
 - Auth/PIN: `backend/src/api/auth.ts`
 - Image proxy: `backend/src/api/image-proxy.ts`
+- Ratings (Plex server, VOD): `backend/src/api/plex.ts`
 - Frontend backend clients: `src/services/plex_backend.ts`, `src/services/plex_backend_player.ts`
+- Ratings service (frontend): `src/services/ratings.ts`
 - Players: `src/components/AdvancedPlayer.tsx`, `src/components/PlexVideoPlayer.tsx`, `src/routes/Player.tsx`
 
 ## Testing Tips
