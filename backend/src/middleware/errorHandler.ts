@@ -21,6 +21,10 @@ export function errorHandler(
   res: Response,
   next: NextFunction
 ) {
+  if (res.headersSent) {
+    // Defer to Express default handler if response already started
+    return next(err as any);
+  }
   let statusCode = 500;
   let message = 'Internal Server Error';
   let isOperational = false;

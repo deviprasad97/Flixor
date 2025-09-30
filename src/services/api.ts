@@ -5,9 +5,10 @@
 // - Otherwise default to same-origin '/api' (behind reverse proxy)
 const defaultApiBase = (() => {
   try {
-    const loc = window.location;
-    if (loc && loc.port === '5173') return 'http://localhost:3001/api';
+    // In dev, default to same-origin '/api' (proxied to backend by Vite)
+    if ((import.meta as any).env?.DEV) return '/api';
   } catch {}
+  // In production, assume same-origin reverse proxy
   return '/api';
 })();
 

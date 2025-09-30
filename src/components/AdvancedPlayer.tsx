@@ -164,12 +164,22 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
   });
   const lastVolRef = useRef<number>(parseFloat(localStorage.getItem('player_volume_last') || '0.8') || 0.8);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const volumeSliderRef = useRef<HTMLInputElement | null>(null); // legacy (removed input), kept for blur calls
+  const volTrackRef = useRef<HTMLDivElement | null>(null);
+  const [isDraggingVolume, setIsDraggingVolume] = useState(false);
+  const isDraggingVolumeRef = useRef(false);
+  useEffect(() => { isDraggingVolumeRef.current = isDraggingVolume; }, [isDraggingVolume]);
+  const [volumeSliderKey, setVolumeSliderKey] = useState(0);
+  const [showSpeed, setShowSpeed] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(!!document.fullscreenElement);
   
   // UI state
   const [showControls, setShowControls] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'quality' | 'audio' | 'subtitles'>('quality');
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const volumePopoverRef = useRef<HTMLDivElement | null>(null);
+  const volumeButtonRef = useRef<HTMLButtonElement | null>(null);
   
   // Quality settings
   const [quality, setQuality] = useState<string | number>(() => {
@@ -228,6 +238,124 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // Ensure release on any global pointer-up (covers Safari missing mouseup outside window)
+  useEffect(() => {
+    const release = () => {
+      if (!isDraggingVolume) return;
+      setIsDraggingVolume(false);
+      try { volumeSliderRef.current?.blur(); } catch {}
+      // Force remount to drop any stuck active state in WebKit
+      setVolumeSliderKey((k) => k + 1);
+    };
+
+    window.addEventListener('mouseup', release);
+    window.addEventListener('pointerup', release as any);
+    window.addEventListener('touchend', release as any);
+    window.addEventListener('dragend', release);
+    window.addEventListener('blur', release);
+    // Detect cursor leaving window (Safari sometimes misses mouseup)
+    const onOut = (e: MouseEvent) => {
+      const to = (e.relatedTarget || (e as any).toElement) as Node | null;
+      if (!to) release();
+    };
+    window.addEventListener('mouseout', onOut);
+    return () => {
+      window.removeEventListener('mouseup', release);
+      window.removeEventListener('pointerup', release as any);
+      window.removeEventListener('touchend', release as any);
+      window.removeEventListener('dragend', release);
+      window.removeEventListener('blur', release);
+      window.removeEventListener('mouseout', onOut);
+    };
+  }, [isDraggingVolume]);
+
+  // Custom volume slider handlers (to avoid Safari range issues)
+  const updateVolumeFromEvent = useCallback((ev: MouseEvent | TouchEvent | PointerEvent) => {
+    const track = volTrackRef.current; if (!track) return;
+    const rect = track.getBoundingClientRect();
+    let clientX = 0;
+    if ((ev as TouchEvent).touches && (ev as TouchEvent).touches.length) {
+      clientX = (ev as TouchEvent).touches[0].clientX;
+    } else if ((ev as any).clientX !== undefined) {
+      clientX = (ev as MouseEvent).clientX;
+    }
+    let ratio = (clientX - rect.left) / rect.width;
+    ratio = Math.max(0, Math.min(1, ratio));
+    setVolume(ratio);
+  }, []);
+
+  const endVolDrag = useCallback(() => {
+    setIsDraggingVolume(false);
+    try { volumeSliderRef.current?.blur(); } catch {}
+    try { document.body.style.userSelect = ''; } catch {}
+    window.removeEventListener('mousemove', onVolMove as any);
+    window.removeEventListener('pointermove', onVolMove as any);
+    window.removeEventListener('touchmove', onVolMove as any);
+    window.removeEventListener('mouseup', endVolDrag);
+    window.removeEventListener('pointerup', endVolDrag as any);
+    window.removeEventListener('touchend', endVolDrag as any);
+  }, []);
+
+  const onVolMove = useCallback((e: any) => {
+    if (!isDraggingVolumeRef.current) return;
+    try { e.preventDefault?.(); } catch {}
+    updateVolumeFromEvent(e);
+  }, []);
+
+  const startVolDrag = useCallback((e: any) => {
+    setIsDraggingVolume(true);
+    try { e.preventDefault?.(); } catch {}
+    const nat = e?.nativeEvent || e;
+    updateVolumeFromEvent(nat);
+    try { if (nat?.target?.setPointerCapture && nat.pointerId != null) nat.target.setPointerCapture(nat.pointerId); } catch {}
+    try { document.body.style.userSelect = 'none'; } catch {}
+    window.addEventListener('mousemove', onVolMove as any, { passive: false } as any);
+    window.addEventListener('pointermove', onVolMove as any, { passive: false } as any);
+    window.addEventListener('touchmove', onVolMove as any, { passive: false } as any);
+    window.addEventListener('mouseup', endVolDrag, { passive: true } as any);
+    window.addEventListener('pointerup', endVolDrag as any, { passive: true } as any);
+    window.addEventListener('touchend', endVolDrag as any, { passive: true } as any);
+  }, [endVolDrag]);
+
+  // Close volume popover when clicking outside
+  useEffect(() => {
+    if (!showVolumeSlider) return;
+    const onDocPointerDown = (e: MouseEvent | TouchEvent) => {
+      const el = e.target as Node;
+      if (!volumePopoverRef.current) return;
+      // Ignore clicks on the toggle button itself
+      if (volumeButtonRef.current && volumeButtonRef.current.contains(el)) return;
+      if (!volumePopoverRef.current.contains(el)) {
+        setShowVolumeSlider(false);
+        setIsDraggingVolume(false);
+        try { volumeSliderRef.current?.blur(); } catch {}
+      }
+    };
+    document.addEventListener('mousedown', onDocPointerDown);
+    document.addEventListener('pointerdown', onDocPointerDown as any);
+    document.addEventListener('touchstart', onDocPointerDown as any, { passive: true } as any);
+    return () => {
+      document.removeEventListener('mousedown', onDocPointerDown);
+      document.removeEventListener('pointerdown', onDocPointerDown as any);
+      document.removeEventListener('touchstart', onDocPointerDown as any);
+    };
+  }, [showVolumeSlider]);
+
+  // Persist and restore playback rate
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('player_rate');
+      if (saved) {
+        const num = parseFloat(saved);
+        if (!Number.isNaN(num) && num > 0) setPlaybackRate(num);
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem('player_rate', String(playbackRate)); } catch {}
+  }, [playbackRate]);
 
   // Click anywhere on video to toggle play/pause (ignore controls)
   function handleBackdropClick(e: React.MouseEvent) {
@@ -658,6 +786,13 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
     }
   }, []);
 
+  // Track fullscreen state for icon swap
+  useEffect(() => {
+    const onFs = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+
   // Next episode countdown
   useEffect(() => {
     if (!metadata?.type || metadata.type !== 'episode') return;
@@ -960,7 +1095,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
         <div className="absolute bottom-0 left-0 right-0 p-6 player-controls">
           <div className="mx-auto">
             {/* Seek bar */}
-            <div className="mb-4 h-12">
+            <div className="h-12">
               <VideoSeekSlider
                 max={duration * 1000}
                 currentTime={currentTime * 1000}
@@ -984,7 +1119,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
               <div className="flex items-center gap-4">
                 {/* Play/Pause */}
                 <button
-                  className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center"
+                  className="w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center text-white bg-transparent transition-transform duration-150 ease-out hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded"
                   onClick={() => {
                     const video = videoRef.current;
                     if (video) {
@@ -998,72 +1133,144 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
                   }}
                 >
                   {playing ? (
-                    <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                    // PauseMedium
+                    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" className="w-9 h-9 sm:w-10 sm:h-10 text-white">
+                      <path fillRule="evenodd" clipRule="evenodd" d="M4.5 3C4.22386 3 4 3.22386 4 3.5V20.5C4 20.7761 4.22386 21 4.5 21H9.5C9.77614 21 10 20.7761 10 20.5V3.5C10 3.22386 9.77614 3 9.5 3H4.5ZM14.5 3C14.2239 3 14 3.22386 14 3.5V20.5C14 20.7761 14.2239 21 14.5 21H19.5C19.7761 21 20 20.7761 20 20.5V3.5C20 3.22386 19.7761 3 19.5 3H14.5Z" />
                     </svg>
                   ) : (
-                    <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
+                    // PlayMedium
+                    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" className="w-9 h-9 sm:w-10 sm:h-10 text-white">
+                      <path d="M5 2.69127C5 1.93067 5.81547 1.44851 6.48192 1.81506L23.4069 11.1238C24.0977 11.5037 24.0977 12.4963 23.4069 12.8762L6.48192 22.1849C5.81546 22.5515 5 22.0693 5 21.3087V2.69127Z" />
                     </svg>
                   )}
                 </button>
 
                 {/* Skip buttons */}
                 <button
-                  className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center"
+                  className="w-12 h-12 sm:w-14 sm:h-14 bg-transparent flex items-center justify-center text-white transition-transform duration-150 ease-out hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded"
                   onClick={() => {
                     const video = videoRef.current;
                     if (video) video.currentTime = Math.max(0, currentTime - 10);
                   }}
                 >
-                  <Replay10Icon className="w-7 h-7 text-white" />
+                  <Replay10Icon className="w-8 h-8 text-white" />
                 </button>
                 <button
-                  className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center"
+                  className="w-12 h-12 sm:w-14 sm:h-14 bg-transparent flex items-center justify-center text-white transition-transform duration-150 ease-out hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded"
                   onClick={() => {
                     const video = videoRef.current;
                     if (video) video.currentTime = Math.min(duration, currentTime + 10);
                   }}
                 >
-                  <Forward10Icon className="w-7 h-7 text-white" />
+                  <Forward10Icon className="w-8 h-8 text-white" />
                 </button>
 
                 {/* Volume */}
                 <div className="flex items-center">
                   <button
-                    className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center"
+                    ref={volumeButtonRef}
+                    className="w-12 h-12 sm:w-14 sm:h-14 bg-transparent flex items-center justify-center text-white transition-transform duration-150 ease-out hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded"
                     onClick={() => setShowVolumeSlider(!showVolumeSlider)}
                     aria-label="Volume"
                     title="Volume"
                   >
-                    <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      {volume === 0 ? (
-                        <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
-                      ) : volume < 0.5 ? (
-                        <path d="M7 9v6h4l5 5V4l-5 5H7z" />
-                      ) : (
-                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-                      )}
-                    </svg>
+                    {(() => {
+                      const state = volume === 0 ? 'off' : volume <= 0.33 ? 'low' : volume <= 0.66 ? 'medium' : 'high';
+                      if (state === 'off') {
+                        return (
+                          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" className="w-8 h-8 text-white">
+                            <path fillRule="evenodd" clipRule="evenodd" d="M11 4.00003C11 3.59557 10.7564 3.23093 10.3827 3.07615C10.009 2.92137 9.57889 3.00692 9.29289 3.29292L4.58579 8.00003H1C0.447715 8.00003 0 8.44774 0 9.00003V15C0 15.5523 0.447715 16 1 16H4.58579L9.29289 20.7071C9.57889 20.9931 10.009 21.0787 10.3827 20.9239C10.7564 20.7691 11 20.4045 11 20V4.00003ZM5.70711 9.70714L9 6.41424V17.5858L5.70711 14.2929L5.41421 14H5H2V10H5H5.41421L5.70711 9.70714ZM15.2929 9.70714L17.5858 12L15.2929 14.2929L16.7071 15.7071L19 13.4142L21.2929 15.7071L22.7071 14.2929L20.4142 12L22.7071 9.70714L21.2929 8.29292L19 10.5858L16.7071 8.29292L15.2929 9.70714Z" />
+                          </svg>
+                        );
+                      }
+                      if (state === 'low') {
+                        return (
+                          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" className="w-8 h-8 text-white">
+                            <path fillRule="evenodd" clipRule="evenodd" d="M11 4.00003C11 3.59557 10.7564 3.23093 10.3827 3.07615C10.009 2.92137 9.57889 3.00692 9.29289 3.29292L4.58579 8.00003H1C0.447715 8.00003 0 8.44774 0 9.00003V15C0 15.5523 0.447715 16 1 16H4.58579L9.29289 20.7071C9.57889 20.9931 10.009 21.0787 10.3827 20.9239C10.7564 20.7691 11 20.4045 11 20V4.00003ZM5.70711 9.70714L9 6.41424V17.5858L5.70711 14.2929L5.41421 14H5H2V10H5H5.41421L5.70711 9.70714ZM16.0001 12C16.0001 10.4087 15.368 8.88262 14.2428 7.7574L12.8285 9.17161C13.5787 9.92176 14.0001 10.9392 14.0001 12C14.0001 13.0609 13.5787 14.0783 12.8285 14.8285L14.2428 16.2427C15.368 15.1175 16.0001 13.5913 16.0001 12Z" />
+                          </svg>
+                        );
+                      }
+                      if (state === 'medium') {
+                        return (
+                          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" className="w-8 h-8 text-white">
+                            <path fillRule="evenodd" clipRule="evenodd" d="M11 4.00003C11 3.59557 10.7564 3.23093 10.3827 3.07615C10.009 2.92137 9.57889 3.00692 9.29289 3.29292L4.58579 8.00003H1C0.447715 8.00003 0 8.44774 0 9.00003V15C0 15.5523 0.447715 16 1 16H4.58579L9.29289 20.7071C9.57889 20.9931 10.009 21.0787 10.3827 20.9239C10.7564 20.7691 11 20.4045 11 20V4.00003ZM5.70711 9.70714L9 6.41424V17.5858L5.70711 14.2929L5.41421 14H5H2V10H5H5.41421L5.70711 9.70714ZM17.0709 4.92897C18.9462 6.80433 19.9998 9.34787 19.9998 12C19.9998 14.6522 18.9462 17.1957 17.0709 19.0711L15.6567 17.6569C17.157 16.1566 17.9998 14.1218 17.9998 12C17.9998 9.87831 17.157 7.84347 15.6567 6.34318L17.0709 4.92897ZM14.2428 7.7574C15.368 8.88262 16.0001 10.4087 16.0001 12C16.0001 13.5913 15.368 15.1175 14.2428 16.2427L12.8285 14.8285C13.5787 14.0783 14.0001 13.0609 14.0001 12C14.0001 10.9392 13.5787 9.92176 12.8285 9.17161L14.2428 7.7574Z" />
+                          </svg>
+                        );
+                      }
+                      // high
+                      return (
+                        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" className="w-7 h-7 text-white">
+                          <path fillRule="evenodd" clipRule="evenodd" d="M24 12C24 8.28693 22.525 4.72597 19.8995 2.10046L18.4853 3.51468C20.7357 5.76511 22 8.81736 22 12C22 15.1826 20.7357 18.2348 18.4853 20.4852L19.8995 21.8995C22.525 19.2739 24 15.713 24 12ZM11 3.99995C11 3.59549 10.7564 3.23085 10.3827 3.07607C10.009 2.92129 9.57889 3.00685 9.29289 3.29285L4.58579 7.99995H1C0.447715 7.99995 0 8.44767 0 8.99995V15C0 15.5522 0.447715 16 1 16H4.58579L9.29289 20.7071C9.57889 20.9931 10.009 21.0786 10.3827 20.9238C10.7564 20.7691 11 20.4044 11 20V3.99995ZM5.70711 9.70706L9 6.41417V17.5857L5.70711 14.2928L5.41421 14H5H2V9.99995H5H5.41421L5.70711 9.70706ZM16.0001 12C16.0001 10.4087 15.368 8.88254 14.2428 7.75732L12.8285 9.17154C13.5787 9.92168 14.0001 10.9391 14.0001 12C14.0001 13.0608 13.5787 14.0782 12.8285 14.8284L14.2428 16.2426C15.368 15.1174 16.0001 13.5913 16.0001 12ZM17.0709 4.92889C18.9462 6.80426 19.9998 9.3478 19.9998 12C19.9998 14.6521 18.9462 17.1957 17.0709 19.071L15.6567 17.6568C17.157 16.1565 17.9998 14.1217 17.9998 12C17.9998 9.87823 17.157 7.8434 15.6567 6.34311L17.0709 4.92889Z" />
+                        </svg>
+                      );
+                    })()}
                   </button>
                   <div className="ml-3 overflow-hidden transition-[width] duration-200" style={{ width: showVolumeSlider ? '18rem' : 0 }}>
-                    <div className={`bg-black/90 rounded-2xl px-4 py-3 ring-1 ring-white/10 shadow-xl w-[18rem] transition-all duration-200 ${showVolumeSlider ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}>
+                    <div ref={volumePopoverRef} className={`bg-black/90 rounded-2xl px-4 py-3 ring-1 ring-white/10 shadow-xl w-[18rem] transition-all duration-200 ${showVolumeSlider ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}>
                       <div className="flex items-center gap-3">
-                        <svg className="w-5 h-5 text-white flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
-                        </svg>
-                        <div className="relative flex-1 h-1.5">
+                        {(() => {
+                          const state = volume === 0 ? 'off' : volume <= 0.33 ? 'low' : volume <= 0.66 ? 'medium' : 'high';
+                          const cls = 'w-5 h-5 text-white flex-shrink-0';
+                          if (state === 'off') {
+                            return (
+                        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" className={cls}>
+                                <path fillRule="evenodd" clipRule="evenodd" d="M11 4.00003C11 3.59557 10.7564 3.23093 10.3827 3.07615C10.009 2.92137 9.57889 3.00692 9.29289 3.29292L4.58579 8.00003H1C0.447715 8.00003 0 8.44774 0 9.00003V15C0 15.5523 0.447715 16 1 16H4.58579L9.29289 20.7071C9.57889 20.9931 10.009 21.0787 10.3827 20.9239C10.7564 20.7691 11 20.4045 11 20V4.00003ZM5.70711 9.70714L9 6.41424V17.5858L5.70711 14.2929L5.41421 14H5H2V10H5H5.41421L5.70711 9.70714ZM15.2929 9.70714L17.5858 12L15.2929 14.2929L16.7071 15.7071L19 13.4142L21.2929 15.7071L22.7071 14.2929L20.4142 12L22.7071 9.70714L21.2929 8.29292L19 10.5858L16.7071 8.29292L15.2929 9.70714Z" />
+                              </svg>
+                            );
+                          }
+                          if (state === 'low') {
+                            return (
+                              <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" className={cls}>
+                                <path fillRule="evenodd" clipRule="evenodd" d="M11 4.00003C11 3.59557 10.7564 3.23093 10.3827 3.07615C10.009 2.92137 9.57889 3.00692 9.29289 3.29292L4.58579 8.00003H1C0.447715 8.00003 0 8.44774 0 9.00003V15C0 15.5523 0.447715 16 1 16H4.58579L9.29289 20.7071C9.57889 20.9931 10.009 21.0787 10.3827 20.9239C10.7564 20.7691 11 20.4045 11 20V4.00003ZM5.70711 9.70714L9 6.41424V17.5858L5.70711 14.2929L5.41421 14H5H2V10H5H5.41421L5.70711 9.70714ZM16.0001 12C16.0001 10.4087 15.368 8.88262 14.2428 7.7574L12.8285 9.17161C13.5787 9.92176 14.0001 10.9392 14.0001 12C14.0001 13.0609 13.5787 14.0783 12.8285 14.8285L14.2428 16.2427C15.368 15.1175 16.0001 13.5913 16.0001 12Z" />
+                              </svg>
+                            );
+                          }
+                          if (state === 'medium') {
+                            return (
+                              <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" className={cls}>
+                                <path fillRule="evenodd" clipRule="evenodd" d="M11 4.00003C11 3.59557 10.7564 3.23093 10.3827 3.07615C10.009 2.92137 9.57889 3.00692 9.29289 3.29292L4.58579 8.00003H1C0.447715 8.00003 0 8.44774 0 9.00003V15C0 15.5523 0.447715 16 1 16H4.58579L9.29289 20.7071C9.57889 20.9931 10.009 21.0787 10.3827 20.9239C10.7564 20.7691 11 20.4045 11 20V4.00003ZM5.70711 9.70714L9 6.41424V17.5858L5.70711 14.2929L5.41421 14H5H2V10H5H5.41421L5.70711 9.70714ZM17.0709 4.92897C18.9462 6.80433 19.9998 9.34787 19.9998 12C19.9998 14.6522 18.9462 17.1957 17.0709 19.0711L15.6567 17.6569C17.157 16.1566 17.9998 14.1218 17.9998 12C17.9998 9.87831 17.157 7.84347 15.6567 6.34318L17.0709 4.92897ZM14.2428 7.7574C15.368 8.88262 16.0001 10.4087 16.0001 12C16.0001 13.5913 15.368 15.1175 14.2428 16.2427L12.8285 14.8285C13.5787 14.0783 14.0001 13.0609 14.0001 12C14.0001 10.9392 13.5787 9.92176 12.8285 9.17161L14.2428 7.7574Z" />
+                              </svg>
+                            );
+                          }
+                          return (
+                            <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" className={cls}>
+                              <path fillRule="evenodd" clipRule="evenodd" d="M24 12C24 8.28693 22.525 4.72597 19.8995 2.10046L18.4853 3.51468C20.7357 5.76511 22 8.81736 22 12C22 15.1826 20.7357 18.2348 18.4853 20.4852L19.8995 21.8995C22.525 19.2739 24 15.713 24 12ZM11 3.99995C11 3.59549 10.7564 3.23085 10.3827 3.07607C10.009 2.92129 9.57889 3.00685 9.29289 3.29285L4.58579 7.99995H1C0.447715 7.99995 0 8.44767 0 8.99995V15C0 15.5522 0.447715 16 1 16H4.58579L9.29289 20.7071C9.57889 20.9931 10.009 21.0786 10.3827 20.9238C10.7564 20.7691 11 20.4044 11 20V3.99995ZM5.70711 9.70706L9 6.41417V17.5857L5.70711 14.2928L5.41421 14H5H2V9.99995H5H5.41421L5.70711 9.70706ZM16.0001 12C16.0001 10.4087 15.368 8.88254 14.2428 7.75732L12.8285 9.17154C13.5787 9.92168 14.0001 10.9391 14.0001 12C14.0001 13.0608 13.5787 14.0782 12.8285 14.8284L14.2428 16.2426C15.368 15.1174 16.0001 13.5913 16.0001 12ZM17.0709 4.92889C18.9462 6.80426 19.9998 9.3478 19.9998 12C19.9998 14.6521 18.9462 17.1957 17.0709 19.071L15.6567 17.6568C17.157 16.1565 17.9998 14.1217 17.9998 12C17.9998 9.87823 17.157 7.8434 15.6567 6.34311L17.0709 4.92889Z" />
+                            </svg>
+                          );
+                        })()}
+                        <div className="relative flex-1 h-1.5 select-none">
                           <div className="absolute inset-0 bg-white/20 rounded-full overflow-hidden">
                             <div className="h-full rounded-full bg-gradient-to-r from-red-500 to-red-600" style={{ width: `${Math.round(volume*100)}%`, transition: 'width 160ms ease' }} />
                           </div>
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            value={Math.round(volume * 100)}
-                            onChange={(e) => setVolume((parseInt(e.target.value) || 0) / 100)}
+                          {/* Visible thumb to mirror Netflix */}
+                          <div
+                            className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-20 pointer-events-none transition-transform ${isDraggingVolume ? 'scale-105' : ''}`}
+                            style={{ left: `${Math.round(volume * 100)}%` }}
+                            aria-hidden
+                          >
+                            <div className="w-5 h-5 rounded-full border-4 border-white/60 flex items-center justify-center">
+                              <span className="block w-2.5 h-2.5 rounded-full bg-white" />
+                            </div>
+                          </div>
+                          <div
+                            ref={volTrackRef}
+                            role="slider"
                             aria-label="Volume"
-                            className="range-h absolute inset-0 w-full h-full cursor-pointer"
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={Math.round(volume * 100)}
+                            tabIndex={0}
+                            className="absolute inset-0 w-full h-full cursor-pointer"
+                            style={{ touchAction: 'none' }}
+                            onMouseDown={startVolDrag}
+                            onPointerDown={startVolDrag}
+                            onTouchStart={startVolDrag}
+                            onKeyDown={(e) => {
+                              if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); setVolume(v => Math.max(0, v - 0.05)); }
+                              if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); setVolume(v => Math.min(1, v + 0.05)); }
+                              if (e.key === 'Home') { e.preventDefault(); setVolume(0); }
+                              if (e.key === 'End') { e.preventDefault(); setVolume(1); }
+                            }}
                           />
                         </div>
                         <div className="w-12 text-right text-xs text-white/70">{Math.round(volume * 100)}%</div>
@@ -1082,10 +1289,10 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
                 {/* Settings */}
                 <div className="relative">
                   <button
-                    className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                    className="p-2 bg-transparent text-white transition-transform duration-150 ease-out hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded"
                     onClick={() => setShowSettings(!showSettings)}
                   >
-                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
@@ -1213,31 +1420,82 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
                   )}
                 </div>
 
-                {/* Playback speed */}
-                <select
-                  className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded transition-colors"
-                  value={playbackRate}
-                  onChange={(e) => setPlaybackRate(parseFloat(e.target.value))}
-                >
-                  <option value="0.5">0.5x</option>
-                  <option value="0.75">0.75x</option>
-                  <option value="1">1x</option>
-                  <option value="1.25">1.25x</option>
-                  <option value="1.5">1.5x</option>
-                  <option value="2">2x</option>
-                </select>
+                {/* Playback speed (Netflix-style) */}
+                <div className="relative">
+                  <button
+                    className="p-2 bg-transparent text-white transition-transform duration-150 ease-out hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded"
+                    onClick={() => setShowSpeed(!showSpeed)}
+                    aria-label="Playback speed"
+                    title="Playback speed"
+                  >
+                    {/* InternetSpeedMedium icon */}
+                    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" className="w-8 h-8 text-white">
+                      <path fillRule="evenodd" clipRule="evenodd" d="M19.0569 6.27006C15.1546 2.20629 8.84535 2.20629 4.94312 6.27006C1.01896 10.3567 1.01896 16.9985 4.94312 21.0852L3.50053 22.4704C-1.16684 17.6098 -1.16684 9.7454 3.50053 4.88481C8.18984 0.0013696 15.8102 0.0013696 20.4995 4.88481C25.1668 9.7454 25.1668 17.6098 20.4995 22.4704L19.0569 21.0852C22.981 16.9985 22.981 10.3567 19.0569 6.27006ZM15 14.0001C15 15.6569 13.6569 17.0001 12 17.0001C10.3431 17.0001 9 15.6569 9 14.0001C9 12.3432 10.3431 11.0001 12 11.0001C12.4632 11.0001 12.9018 11.105 13.2934 11.2924L16.2929 8.29296L17.7071 9.70717L14.7076 12.7067C14.895 13.0983 15 13.5369 15 14.0001Z" />
+                    </svg>
+                  </button>
+
+                  {showSpeed && (
+                    <div className="absolute bottom-full right-0 mb-2 w-[28rem] max-w-[92vw] bg-black/95 backdrop-blur rounded-lg ring-1 ring-white/10 shadow-2xl p-5">
+                      <div className="text-white font-bold text-2xl mb-6">Playback Speed</div>
+                      {/* Discrete slider track */}
+                      <div className="relative my-5 pt-2">
+                        <div className="absolute left-2 right-2 top-[1.375rem] h-0.5 bg-white/20" />
+                        <div className="relative flex justify-between items-center px-2">
+                          {[0.5, 0.75, 1, 1.25, 1.5].map((s) => {
+                            const selected = Math.abs(playbackRate - s) < 0.001;
+                            return (
+                              <button
+                                key={s}
+                                onClick={() => { setPlaybackRate(s); setShowSpeed(false); }}
+                                className="group relative flex items-center justify-center"
+                                aria-label={`${s}x`}
+                              >
+                                {selected ? (
+                                  <span className="w-10 h-10 rounded-full border-4 border-white/60 flex items-center justify-center">
+                                    <span className="w-4 h-4 rounded-full bg-white" />
+                                  </span>
+                                ) : (
+                                  <span className="w-4 h-4 rounded-full bg-white/60 group-hover:bg-white" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-5 grid grid-cols-5 gap-0 text-center">
+                          {[0.5, 0.75, 1, 1.25, 1.5].map((s) => {
+                            const selected = Math.abs(playbackRate - s) < 0.001;
+                            return (
+                              <div key={`label-${s}`} className={selected ? 'text-white text-lg font-semibold' : 'text-white/80'}>
+                                {s === 1 ? '1x (Normal)' : `${s}x`}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* Picture-in-Picture */}
                 <PiPButton videoRef={videoRef} />
 
                 {/* Fullscreen */}
                 <button
-                  className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                  className="p-2 bg-transparent text-white transition-transform duration-150 ease-out hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded"
                   onClick={toggleFullscreen}
+                  aria-label={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
                 >
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                  </svg>
+                  {isFullscreen ? (
+                    // FullscreenExitMedium
+                    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" className="w-8 h-8 text-white">
+                      <path fillRule="evenodd" clipRule="evenodd" d="M24 8H19V3H17V9V10H18H24V8ZM0 16H5V21H7V15V14H6H0V16ZM7 10H6H0V8H5V3H7V9V10ZM19 21V16H24V14H18H17V15V21H19Z" />
+                    </svg>
+                  ) : (
+                    // FullscreenEnterMedium
+                    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" className="w-8 h-8 text-white">
+                      <path fillRule="evenodd" clipRule="evenodd" d="M0 5C0 3.89543 0.895431 3 2 3H9V5H2V9H0V5ZM22 5H15V3H22C23.1046 3 24 3.89543 24 5V9H22V5ZM2 15V19H9V21H2C0.895431 21 0 20.1046 0 19V15H2ZM22 19V15H24V19C24 20.1046 23.1046 21 22 21H15V19H22Z" />
+                    </svg>
+                  )}
                 </button>
               </div>
             </div>
@@ -1255,12 +1513,12 @@ function PiPButton({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement> }
   if (!supported) return null;
   return (
     <button
-      className={`p-2 rounded-full ${active ? 'bg-white/20' : 'bg-white/10 hover:bg-white/20'} transition-colors`}
+      className={`p-2 bg-transparent text-white transition-transform duration-150 ease-out hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded`}
       onClick={() => toggle()}
       title="Picture in Picture"
     >
       {/* Simple PiP glyph */}
-      <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+      <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
         <path d="M3 5a2 2 0 012-2h14a2 2 0 012 2v6h-2V5H5v14h6v2H5a2 2 0 01-2-2V5z"/>
         <rect x="13" y="13" width="8" height="6" rx="1"/>
       </svg>

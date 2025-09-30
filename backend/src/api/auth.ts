@@ -172,20 +172,41 @@ router.get('/plex/pin/:id', async (req: Request, res: Response, next: NextFuncti
       throw new AppError('Client ID is required', 400);
     }
 
-    const response = await axios.get(
-      `${PLEX_TV_URL}/api/v2/pins/${id}`,
-      { headers: getPlexHeaders(clientId as string) }
-    );
+    let response: any;
+    try {
+      response = await axios.get(
+        `${PLEX_TV_URL}/api/v2/pins/${id}`,
+        { headers: getPlexHeaders(clientId as string) }
+      );
+    } catch (err: any) {
+      // Treat transient/expired PIN errors as not authenticated instead of 500,
+      // so the frontend can keep polling or restart.
+      logger.warn('Plex PIN check request failed', {
+        id,
+        status: err?.response?.status,
+        message: err?.message,
+      });
+      return res.json({ authenticated: false, pending: true });
+    }
 
       if (response.data.authToken) {
         // PIN has been authenticated
         const token = response.data.authToken;
 
       // Get user info
-      const userResponse = await axios.get(
-        `${PLEX_TV_URL}/api/v2/user`,
-        { headers: getPlexHeaders(clientId as string, token) }
-      );
+      let userResponse: any;
+      try {
+        userResponse = await axios.get(
+          `${PLEX_TV_URL}/api/v2/user`,
+          { headers: getPlexHeaders(clientId as string, token) }
+        );
+      } catch (err: any) {
+        logger.warn('Plex user fetch failed after PIN success', {
+          status: err?.response?.status,
+          message: err?.message,
+        });
+        return res.json({ authenticated: false, pending: true });
+      }
 
       const plexUser = userResponse.data;
 
@@ -256,7 +277,7 @@ router.get('/plex/pin/:id', async (req: Request, res: Response, next: NextFuncti
       if (req.session.userId === user.id) {
         // nothing to do
       } else {
-        // Create session (regenerate to avoid duplicate key races)
+        // Create session (regenerate to avoid fixation); rely on end-of-request save
         await new Promise<void>((resolve, reject) => {
           req.session.regenerate((err) => err ? reject(err) : resolve());
         });
@@ -264,27 +285,7 @@ router.get('/plex/pin/:id', async (req: Request, res: Response, next: NextFuncti
         req.session.userId = user.id as any;
         (req.session as any).plexId = user.plexId;
         (req.session as any).username = user.username;
-
-        try {
-          await new Promise<void>((resolve, reject) => {
-            req.session.save((err) => err ? reject(err) : resolve());
-          });
-        } catch (e: any) {
-          // On duplicate key, try updating via store.set; otherwise ignore
-          const msg = String(e?.message || '');
-          if (/SQLITE_CONSTRAINT/.test(msg)) {
-            logger.warn('Session save duplicate; attempting store.set update');
-            try {
-              await new Promise<void>((resolve, reject) => {
-                (req.session as any).store.set(req.sessionID, req.session, (err: any) => err ? reject(err) : resolve());
-              });
-            } catch (e2) {
-              logger.warn('Session store.set also failed; proceeding without error');
-            }
-          } else {
-            throw e;
-          }
-        }
+        // Do not call req.session.save() explicitly to avoid double INSERT races with the store.
       }
 
       logger.info(`User authenticated: ${user.username} (${user.plexId})`);
@@ -363,13 +364,27 @@ router.get('/validate', requireAuth, async (req: AuthenticatedRequest, res: Resp
 
 // Logout
 router.post('/logout', (req: Request, res: Response, next: NextFunction) => {
+  // Capture cookie attributes to correctly clear the cookie
+  const cookieOpts: any = {
+    path: '/',
+  };
+  try {
+    const c: any = (req as any).session?.cookie;
+    if (c) {
+      if (typeof c.secure === 'boolean') cookieOpts.secure = c.secure;
+      if (c.sameSite) cookieOpts.sameSite = c.sameSite;
+      if (c.domain) cookieOpts.domain = c.domain;
+      if (c.path) cookieOpts.path = c.path;
+    }
+  } catch {}
+
   req.session.destroy((err) => {
     if (err) {
       logger.error('Failed to destroy session:', err);
       return next(new AppError('Failed to logout', 500));
     }
 
-    res.clearCookie('plex.sid');
+    try { res.clearCookie('plex.sid', cookieOpts); } catch {}
     res.json({ success: true });
   });
 });
