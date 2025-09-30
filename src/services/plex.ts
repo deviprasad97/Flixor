@@ -219,7 +219,7 @@ function getClientProfile(): string {
 
 export function getXPlexHeaders(token: string) {
   return {
-    'X-Plex-Product': 'Plex MPV Client',
+    'X-Plex-Product': 'Flixor',
     'X-Plex-Version': '1.0.0',
     'X-Plex-Client-Identifier': getClientId(),
     'X-Plex-Platform': 'Web',

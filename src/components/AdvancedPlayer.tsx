@@ -1064,7 +1064,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
         <div className="absolute top-0 left-0 right-0 p-6">
           <div className="flex items-center gap-4">
             <button
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+              className="p-2 rounded-full transition-colors"
               onClick={() => {
                 backendUpdateProgress(metadata!.ratingKey, currentTime * 1000, duration * 1000, 'stopped')
                   .catch(() => {
@@ -1095,7 +1095,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
         <div className="absolute bottom-0 left-0 right-0 p-6 player-controls">
           <div className="mx-auto">
             {/* Seek bar */}
-            <div className="h-12">
+            <div className="h-12 grid grid-cols-[1fr_auto] items-center gap-3">
               <VideoSeekSlider
                 max={duration * 1000}
                 currentTime={currentTime * 1000}
@@ -1112,6 +1112,11 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
                   return plexTranscodeImageUrl(plexConfig, `/library/parts/${partId}/indexes/sd/${Math.floor(time)}`, 320, 180);
                 } : undefined}
               />
+              {duration > 0 && (
+                <span className="text-white text-sm font-medium drop-shadow whitespace-nowrap" title="Time remaining" style={{ marginTop: '-33px' }}>
+                  -{formatTime(Math.max(0, duration - currentTime))}
+                </span>
+              )}
             </div>
 
             {/* Control buttons */}
@@ -1277,11 +1282,6 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
                       </div>
                     </div>
                   </div>
-                </div>
-
-                {/* Time display */}
-                <div className="text-white text-sm">
-                  {formatTime(currentTime)} / {formatTime(duration)}
                 </div>
               </div>
 

@@ -103,7 +103,7 @@ await plexKillAllTranscodeSessions(plexConfig);
 ### 5. Client Identification
 
 The player identifies itself to Plex servers with proper headers:
-- Product: "Plex MPV Client"
+- Product: "Flixor"
 - Platform: "Web"
 - Client ID: Persistent per browser
 - Session ID: Persistent per playback session

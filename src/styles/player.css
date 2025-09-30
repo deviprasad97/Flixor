@@ -15,12 +15,12 @@
 }
 
 .ui-video-seek-slider .track .main .connect {
-  background: rgb(239, 68, 68);
+  background: rgb(255, 0, 0);
   border-radius: 4px;
 }
 
 .ui-video-seek-slider .track .buffered {
-  background: rgba(255, 255, 255, 0.3);
+  background: #808080;
   border-radius: 4px;
 }
 
@@ -36,7 +36,7 @@
 .ui-video-seek-slider .thumb .handler {
   width: 16px;
   height: 16px;
-  background: rgb(239, 68, 68);
+  background: rgb(255, 0, 0);
   border: 2px solid white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
   top: 1px;
