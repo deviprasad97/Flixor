@@ -16,7 +16,8 @@
       "@/components/*": ["src/components/*"],
       "@/routes/*": ["src/routes/*"],
       "@/services/*": ["src/services/*"],
-      "@/state/*": ["src/state/*"]
+      "@/state/*": ["src/state/*"],
+      "@/hooks/*": ["src/hooks/*"]
     }
   },
   "include": ["src"]

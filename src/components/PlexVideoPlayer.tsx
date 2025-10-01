@@ -20,6 +20,7 @@ interface PlexVideoPlayerProps {
   playbackRate?: number;
   onPlayingChange?: (playing: boolean) => void;
   onCodecError?: (error: string) => void; // Callback for codec-specific errors
+  onUserSeek?: () => void;
 }
 
 export default function PlexVideoPlayer({
@@ -38,6 +39,7 @@ export default function PlexVideoPlayer({
   playbackRate = 1,
   onPlayingChange,
   onCodecError,
+  onUserSeek,
 }: PlexVideoPlayerProps) {
   const internalVideoRef = useRef<HTMLVideoElement>(null);
   const videoRef = externalVideoRef || internalVideoRef;
@@ -99,35 +101,22 @@ export default function PlexVideoPlayer({
         dash.updateSettings({
           streaming: {
             buffer: {
-              bufferTimeAtTopQuality: 20, // Reduced from 30
+              bufferTimeAtTopQuality: 20,
               bufferPruningInterval: 10,
-              bufferToKeep: 10, // Reduced from 20
-              bufferAheadToKeep: 20, // Keep less ahead
+              bufferToKeep: 10,
               fastSwitchEnabled: true,
               stallThreshold: 0.5,
             },
             abr: {
               autoSwitchBitrate: {
-                video: false, // We control quality manually
+                video: false,
               },
             },
-            retryIntervals: {
-              MPD: 500,
-            },
-            retryAttempts: {
-              MPD: 3,
-            },
-            gaps: {
-              jumpGaps: true,
-              jumpLargeGaps: true,
-            },
+            retryIntervals: { MPD: 500 },
+            retryAttempts: { MPD: 3 },
+            gaps: { jumpGaps: true, jumpLargeGaps: true },
           },
-          debug: {
-            logLevel: 1, // 0=none, 1=error, 2=warning, 3=info, 4=debug
-          },
-          xhr: {
-            withCredentials: true,
-          },
+          debug: { logLevel: 1 },
         });
 
         // Initialize DASH player
@@ -301,6 +290,7 @@ export default function PlexVideoPlayer({
 
     const handleSeeking = () => {
       onBuffering?.(true);
+      onUserSeek?.();
     };
 
     const handleSeeked = () => {

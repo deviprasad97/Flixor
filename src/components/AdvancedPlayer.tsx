@@ -8,6 +8,7 @@ import {
   PlexConfig,
   plexMetadata,
   plexPlayQueue,
+  plexChildren,
 } from '@/services/plex';
 import {
   plexStreamUrl,
@@ -158,12 +159,14 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
   const [currentTime, setCurrentTime] = useState(0);
   const [buffered, setBuffered] = useState(0);
   const [buffering, setBuffering] = useState(false);
+  const [exiting, setExiting] = useState(false);
   const [volume, setVolume] = useState(() => {
     const saved = localStorage.getItem('player_volume');
     return saved ? parseFloat(saved) : 1;
   });
   const lastVolRef = useRef<number>(parseFloat(localStorage.getItem('player_volume_last') || '0.8') || 0.8);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [initialStartAt, setInitialStartAt] = useState<number | undefined>(undefined);
   const volumeSliderRef = useRef<HTMLInputElement | null>(null); // legacy (removed input), kept for blur calls
   const volTrackRef = useRef<HTMLDivElement | null>(null);
   const [isDraggingVolume, setIsDraggingVolume] = useState(false);
@@ -180,6 +183,8 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const volumePopoverRef = useRef<HTMLDivElement | null>(null);
   const volumeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const episodesPanelRef = useRef<HTMLDivElement | null>(null);
+  const episodesButtonRef = useRef<HTMLButtonElement | null>(null);
   
   // Quality settings
   const [quality, setQuality] = useState<string | number>(() => {
@@ -201,6 +206,18 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
   // Play queue
   const [playQueue, setPlayQueue] = useState<PlexMetadata[]>([]);
   const [nextEpisodeCountdown, setNextEpisodeCountdown] = useState<number | null>(null);
+  const [showNextHover, setShowNextHover] = useState(false);
+  const [showEpisodes, setShowEpisodes] = useState(false);
+  const [seasonEpisodes, setSeasonEpisodes] = useState<PlexMetadata[] | null>(null);
+  const [episodesLoading, setEpisodesLoading] = useState(false);
+  const nextEpisode = useMemo(() => {
+    if (playQueue && playQueue[1]) return playQueue[1];
+    if (metadata?.type === 'episode' && seasonEpisodes && seasonEpisodes.length > 0) {
+      const idx = seasonEpisodes.findIndex(ep => String(ep.ratingKey) === String(metadata.ratingKey));
+      if (idx >= 0 && seasonEpisodes[idx + 1]) return seasonEpisodes[idx + 1];
+    }
+    return null;
+  }, [playQueue, seasonEpisodes, metadata]);
 
   // Codec error handling
   const [codecErrorMessage, setCodecErrorMessage] = useState<string | null>(null);
@@ -269,6 +286,25 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
       window.removeEventListener('mouseout', onOut);
     };
   }, [isDraggingVolume]);
+
+  // Close episodes panel when clicking outside
+  useEffect(() => {
+    if (!showEpisodes) return;
+    const onDocDown = (e: MouseEvent | TouchEvent) => {
+      const el = e.target as Node;
+      // Ignore clicks on the episodes toggle button itself
+      if (episodesButtonRef.current && episodesButtonRef.current.contains(el)) return;
+      if (episodesPanelRef.current && !episodesPanelRef.current.contains(el)) {
+        setShowEpisodes(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocDown);
+    document.addEventListener('touchstart', onDocDown as any, { passive: true } as any);
+    return () => {
+      document.removeEventListener('mousedown', onDocDown);
+      document.removeEventListener('touchstart', onDocDown as any);
+    };
+  }, [showEpisodes]);
 
   // Custom volume slider handlers (to avoid Safari range issues)
   const updateVolumeFromEvent = useCallback((ev: MouseEvent | TouchEvent | PointerEvent) => {
@@ -380,6 +416,24 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
         const metaResponse = await (await import('@/services/plex_backend')).plexBackendMetadata(itemId);
         const meta = metaResponse.MediaContainer.Metadata[0] as PlexMetadata;
         setMetadata(meta);
+        // Record initial start time once per item
+        try {
+          const start = meta.viewOffset ? Math.max(0, Math.floor(meta.viewOffset / 1000)) : undefined;
+          const durSec = meta.duration ? Math.floor(meta.duration / 1000) : undefined;
+          // If item was fully watched (>=95%), start from beginning
+          const fromStart = (start !== undefined && durSec && durSec > 0 && start / durSec >= 0.95) ? 0 : start;
+          setInitialStartAt(fromStart);
+        } catch {}
+
+        // Fetch markers (intro/credits) if available from Plex for this item (backend session avoids token issues)
+        try {
+          const { plexBackendDir } = await import('@/services/plex_backend');
+          const mjson: any = await plexBackendDir(`/library/metadata/${itemId}?includeMarkers=1`);
+          const m2 = mjson?.MediaContainer?.Metadata?.[0];
+          if (m2?.Marker && Array.isArray(m2.Marker)) {
+            setMetadata(prev => prev ? { ...prev, Marker: m2.Marker } as PlexMetadata : prev);
+          }
+        } catch {}
         
         // Get quality, audio, and subtitle options
         const qualOpts = getQualityOptions(meta);
@@ -451,7 +505,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
         }
         setStreamUrl(url);
         
-        // Load play queue for episodes
+        // Load play queue and season episodes for TV content
         if (meta.type === 'episode') {
           try {
             const queue = await plexPlayQueue(plexConfig, itemId);
@@ -460,6 +514,22 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
             }
           } catch (err) {
             console.warn('Failed to load play queue:', err);
+          }
+          // Fetch episodes in current season (parentRatingKey)
+          try {
+            if (meta.parentRatingKey) {
+              setEpisodesLoading(true);
+              const chJson: any = await plexChildren(plexConfig, meta.parentRatingKey);
+              const eps: PlexMetadata[] = (chJson?.MediaContainer?.Metadata || []) as PlexMetadata[];
+              setSeasonEpisodes(eps);
+            } else {
+              setSeasonEpisodes(null);
+            }
+          } catch (err) {
+            console.warn('Failed to load season episodes:', err);
+            setSeasonEpisodes(null);
+          } finally {
+            setEpisodesLoading(false);
           }
         }
         
@@ -506,13 +576,13 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
     const handleMouseMove = () => {
       setShowControls(true);
       clearTimeout(timeout);
-      if (playing) {
+      if (playing && !showEpisodes && !showNextHover && nextEpisodeCountdown === null) {
         timeout = setTimeout(() => setShowControls(false), 3000);
       }
     };
     
     const handleMouseLeave = () => {
-      if (playing) {
+      if (playing && !showEpisodes && !showNextHover && nextEpisodeCountdown === null) {
         timeout = setTimeout(() => setShowControls(false), 1000);
       }
     };
@@ -525,7 +595,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
       containerRef.current?.removeEventListener('mouseleave', handleMouseLeave);
       clearTimeout(timeout);
     };
-  }, [playing]);
+  }, [playing, showEpisodes, showNextHover, nextEpisodeCountdown]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -545,6 +615,15 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
             }
           }
           setPlaying(p => !p);
+          break;
+        case 'Escape':
+          if (showEpisodes || showNextHover) {
+            setShowEpisodes(false);
+            setShowNextHover(false);
+            setShowControls(true);
+            e.preventDefault();
+            return;
+          }
           break;
         case 'ArrowLeft':
         case 'j':
@@ -574,7 +653,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
     
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-  }, [currentTime, duration]);
+  }, [currentTime, duration, showEpisodes, showNextHover]);
 
   // Volume persistence
   useEffect(() => {
@@ -757,6 +836,19 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
     }
   }, [metadata, currentTime, quality, plexConfig, itemId]);
 
+  // Navigate to Details page for current item (declared early to avoid TDZ)
+  const goToDetails = useCallback(() => {
+    const m = metadata;
+    if (!m) return;
+    try {
+      setExiting(true);
+      setPlaying(false);
+      const v = videoRef.current; if (v) { try { v.pause(); } catch {} }
+    } catch {}
+    const target = m.type === 'episode' && m.grandparentRatingKey ? `plex:${m.grandparentRatingKey}` : `plex:${m.ratingKey}`;
+    window.location.href = `/details/${encodeURIComponent(target)}`;
+  }, [metadata]);
+
   // Skip current marker
   const skipCurrentMarker = useCallback(() => {
     if (!metadata?.Marker || !videoRef.current) return;
@@ -767,15 +859,14 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
     );
     
     if (marker) {
-      if (marker.type === 'credits' && marker.final && playQueue[1]) {
-        // Skip to next episode
-        onNext?.(playQueue[1].ratingKey);
-      } else {
-        // Skip past the marker
-        videoRef.current.currentTime = (marker.endTimeOffset / 1000) + 1;
+      if (marker.type === 'credits') {
+        if (metadata.type === 'movie') { goToDetails(); return; }
+        if (marker.final && nextEpisode) { onNext?.(String(nextEpisode.ratingKey)); return; }
       }
+      // Skip past the marker
+      videoRef.current.currentTime = (marker.endTimeOffset / 1000) + 1;
     }
-  }, [metadata, currentTime, playQueue, onNext]);
+  }, [metadata, currentTime, nextEpisode, onNext, goToDetails]);
 
   // Toggle fullscreen
   const toggleFullscreen = useCallback(() => {
@@ -793,33 +884,35 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
 
-  // Next episode countdown
+  // Next episode countdown (credits start if available, else last 30s)
   useEffect(() => {
     if (!metadata?.type || metadata.type !== 'episode') return;
-    if (!playQueue[1]) return;
-    if (!duration || currentTime < duration - 30) {
-      setNextEpisodeCountdown(null);
-      return;
+    if (!nextEpisode) { setNextEpisodeCountdown(null); return; }
+    if (!duration) { setNextEpisodeCountdown(null); return; }
+
+    const credits = metadata?.Marker?.find(m => m.type === 'credits');
+    const triggerStart = credits ? (credits.startTimeOffset / 1000) : Math.max(0, duration - 30);
+
+    if (currentTime >= triggerStart) {
+      if (nextEpisodeCountdown === null) setNextEpisodeCountdown(10);
+    } else {
+      if (nextEpisodeCountdown !== null) setNextEpisodeCountdown(null);
     }
-    
-    if (nextEpisodeCountdown === null) {
-      setNextEpisodeCountdown(10);
-    }
-  }, [metadata, playQueue, duration, currentTime, nextEpisodeCountdown]);
+  }, [metadata, duration, currentTime, nextEpisode, nextEpisodeCountdown]);
 
   useEffect(() => {
     if (nextEpisodeCountdown === null || nextEpisodeCountdown <= 0) return;
     
     const timer = setTimeout(() => {
-      if (nextEpisodeCountdown === 1 && playQueue[1]) {
-        onNext?.(playQueue[1].ratingKey);
+      if (nextEpisodeCountdown === 1 && nextEpisode) {
+        onNext?.(String(nextEpisode.ratingKey));
       } else {
         setNextEpisodeCountdown(c => (c ?? 0) - 1);
       }
     }, 1000);
     
     return () => clearTimeout(timer);
-  }, [nextEpisodeCountdown, playQueue, onNext]);
+  }, [nextEpisodeCountdown, nextEpisode, onNext]);
 
   // Get current marker
   const currentMarker = metadata?.Marker?.find(m =>
@@ -843,26 +936,96 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
   const handleTimeUpdate = useCallback((time: number, dur: number) => {
     setCurrentTime(time);
     if (dur && dur > 0) setDuration(dur);
-  }, []);
+    // Clear initial start time after first time update to avoid any reload jumps
+    if (initialStartAt !== undefined) {
+      setInitialStartAt(undefined);
+    }
+  }, [initialStartAt]);
+
+  const handleUserSeek = useCallback(() => {
+    if (initialStartAt !== undefined) setInitialStartAt(undefined);
+    endedRef.current = false; // user intent overrides pending end state
+  }, [initialStartAt]);
 
   const handleReady = useCallback(() => {
     // console.log('Player ready');
     setBuffering(false);
   }, []);
 
+  const endedRef = useRef(false);
+  const headerRetryRef = useRef(false);
   const handleEnded = useCallback(() => {
-    if (playQueue[1]) {
-      onNext?.(playQueue[1].ratingKey);
+    if (endedRef.current) return;
+    endedRef.current = true;
+    if (metadata?.type === 'movie') {
+      goToDetails();
+      return;
+    }
+    if (nextEpisode) {
+      onNext?.(String(nextEpisode.ratingKey));
     } else if (metadata) {
       plexTimelineUpdate(plexConfig, metadata.ratingKey, duration * 1000, duration * 1000, 'stopped');
-      onBack?.();
+      goToDetails();
     }
-  }, [playQueue, metadata, duration, plexConfig, onNext, onBack]);
+  }, [nextEpisode, metadata, duration, plexConfig, onNext, goToDetails]);
 
-  const handleError = useCallback((err: string) => {
+  // Safety: if we reach the end but 'ended' doesn't fire (some MSE edge cases), trigger once
+  useEffect(() => {
+    if (!duration) return;
+    if (endedRef.current) return;
+    if (currentTime >= Math.max(0, duration - 0.25)) {
+      if (metadata?.type === 'movie') {
+        endedRef.current = true;
+        goToDetails();
+        return;
+      }
+      if (nextEpisode) {
+        endedRef.current = true;
+        onNext?.(String(nextEpisode.ratingKey));
+      }
+    }
+  }, [currentTime, duration, nextEpisode, onNext, metadata, goToDetails]);
+
+  const handleError = useCallback(async (err: string) => {
     console.error('Player error:', err);
+    const msg = String(err || '').toLowerCase();
+    if (exiting) return; // already leaving; ignore
+    // If we're at or near the end of a movie, prefer returning to details rather than retrying
+    if (metadata?.type === 'movie' && duration && (currentTime >= duration - 1 || (currentTime / duration) >= 0.95 || (duration - currentTime) <= 30)) {
+      goToDetails();
+      return;
+    }
+    // If transcode session header is not available (stale PMS session), try one clean retry
+    if (!headerRetryRef.current && (msg.includes('header is not available') || (msg.includes('mpd') && msg.includes('header')))) {
+      headerRetryRef.current = true;
+      try {
+        await plexKillAllTranscodeSessions(plexConfig);
+      } catch {}
+      try {
+        // Re-generate stream URL from the beginning with same quality settings
+        const url = plexStreamUrl(plexConfig, itemId, {
+          maxVideoBitrate: quality === 'original' ? undefined : Number(quality),
+          protocol: 'dash',
+          autoAdjustQuality: false,
+          directPlay: false,
+          directStream: false,
+          audioStreamID: selectedAudioStream || undefined,
+          subtitleStreamID: selectedSubtitleStream || undefined,
+          forceReload: true,
+        });
+        // Resume from current position to avoid a restart near the end (e.g., ~22s remaining)
+        const resumeSec = Math.max(0, Math.floor(currentTime));
+        setInitialStartAt(resumeSec);
+        endedRef.current = false;
+        setStreamUrl(url);
+        setError(null);
+        return; // swallow error on first retry
+      } catch (e) {
+        console.error('Header retry failed:', e);
+      }
+    }
     setError(err);
-  }, []);
+  }, [plexConfig, itemId, quality, selectedAudioStream, selectedSubtitleStream]);
 
   const handleCodecError = useCallback(async (err: string) => {
     console.error('Codec error detected:', err);
@@ -923,14 +1086,6 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
     setPlaying(isPlaying);
   }, []);
 
-  if (loading) {
-    return (
-      <div className="fixed inset-0 bg-black flex items-center justify-center">
-        <div className="text-white">Loading...</div>
-      </div>
-    );
-  }
-
   if (error) {
     return (
       <div className="fixed inset-0 bg-black flex items-center justify-center">
@@ -968,6 +1123,33 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
     ? apiClient.getPlexImageNoToken(metadata.thumb)
     : undefined;
 
+  // Compute credits trigger start for movies
+  const creditsStartSec = useMemo(() => {
+    if (metadata?.type !== 'movie') return undefined;
+    if (!duration || duration <= 0) return undefined;
+    const credits = metadata?.Marker?.find(m => m.type === 'credits');
+    const start = credits ? (credits.startTimeOffset / 1000) : Math.max(0, duration - 30);
+    return start;
+  }, [metadata, duration]);
+
+  // Proactive movie exit at credits start (no loop/retry)
+  useEffect(() => {
+    if (exiting) return;
+    if (metadata?.type !== 'movie') return;
+    if (creditsStartSec === undefined) return;
+    if (currentTime > 1 && currentTime >= creditsStartSec) {
+      goToDetails();
+    }
+  }, [metadata, creditsStartSec, currentTime, goToDetails, exiting]);
+
+  if (loading) {
+    return (
+      <div className="fixed inset-0 bg-black flex items-center justify-center">
+        <div className="text-white">Loading...</div>
+      </div>
+    );
+  }
+
   return (
     <div ref={containerRef} className="fixed inset-0 bg-black z-50" onClick={handleBackdropClick}>
       {streamUrl && (
@@ -981,7 +1163,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
             volume={volume}
             playbackRate={playbackRate}
             autoPlay={true}
-            startTime={metadata?.viewOffset ? metadata.viewOffset / 1000 : undefined}
+            startTime={initialStartAt}
             onTimeUpdate={handleTimeUpdate}
             onReady={handleReady}
             onEnded={handleEnded}
@@ -989,6 +1171,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
             onBuffering={handleBuffering}
             onPlayingChange={handlePlayingChange}
             onCodecError={handleCodecError}
+            onUserSeek={handleUserSeek}
           />
         </div>
       )}
@@ -1027,25 +1210,21 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
       )}
 
       {/* Next episode countdown */}
-      {nextEpisodeCountdown !== null && playQueue[1] && (
-        <div className="absolute bottom-32 right-8 z-20">
-          <div className="bg-black/80 backdrop-blur rounded-lg p-4 max-w-sm">
-            <div className="text-white mb-2">
-              Up Next • Playing in {nextEpisodeCountdown}s
-            </div>
-            <div className="text-white/80 font-medium mb-3">
-              {playQueue[1].title}
-            </div>
+      {nextEpisodeCountdown !== null && nextEpisode && (
+        <div className="absolute bottom-32 right-8 z-40">
+          <div className="bg-black/85 backdrop-blur rounded-xl p-4 ring-1 ring-white/10 shadow-2xl max-w-md">
+            <div className="text-white text-base mb-1 font-semibold">Up Next • Playing in {nextEpisodeCountdown}s</div>
+            <div className="text-white/90 mb-3 font-medium line-clamp-1">{nextEpisode.title}</div>
             <div className="flex gap-2">
               <button
-                className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded text-white"
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded text-white"
                 onClick={() => setNextEpisodeCountdown(null)}
               >
                 Cancel
               </button>
               <button
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white"
-                onClick={() => onNext?.(playQueue[1].ratingKey)}
+                onClick={() => onNext?.(String(nextEpisode.ratingKey))}
               >
                 Play Now
               </button>
@@ -1068,10 +1247,17 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
               onClick={() => {
                 backendUpdateProgress(metadata!.ratingKey, currentTime * 1000, duration * 1000, 'stopped')
                   .catch(() => {
-                    // Best-effort fallback to direct timeline if backend call fails
                     try { plexTimelineUpdate(plexConfig, metadata!.ratingKey, currentTime * 1000, duration * 1000, 'stopped'); } catch {}
                   })
-                  .finally(() => onBack?.());
+                  .finally(() => {
+                    if (metadata?.type === 'episode' && metadata.grandparentRatingKey) {
+                      window.location.href = `/details/${encodeURIComponent(`plex:${metadata.grandparentRatingKey}`)}`;
+                    } else if (metadata?.type === 'movie') {
+                      window.location.href = `/details/${encodeURIComponent(`plex:${metadata.ratingKey}`)}`;
+                    } else {
+                      onBack?.();
+                    }
+                  });
               }}
             >
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1101,6 +1287,7 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
                 currentTime={currentTime * 1000}
                 bufferTime={buffered * 1000}
                 onChange={(time: number) => {
+                  handleUserSeek();
                   const video = videoRef.current;
                   if (video) video.currentTime = time / 1000;
                 }}
@@ -1117,10 +1304,10 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
                   -{formatTime(Math.max(0, duration - currentTime))}
                 </span>
               )}
-            </div>
+          </div>
 
-            {/* Control buttons */}
-            <div className="flex items-center justify-between">
+          {/* Control buttons */}
+          <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 {/* Play/Pause */}
                 <button
@@ -1286,6 +1473,67 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
               </div>
 
               <div className="flex items-center gap-4">
+                {metadata?.type === 'episode' && (
+                  <>
+                    {nextEpisode && (
+                      <div className="relative">
+                        <button
+                          className="p-2 bg-transparent text-white transition-transform duration-150 ease-out hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded"
+                          onMouseEnter={() => setShowNextHover(true)}
+                          onMouseLeave={() => setShowNextHover(false)}
+                          onFocus={() => setShowNextHover(true)}
+                          onBlur={() => setShowNextHover(false)}
+                          onClick={() => onNext?.(String(nextEpisode.ratingKey))}
+                          aria-label="Next Episode"
+                          title="Next Episode"
+                        >
+                          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" className="w-8 h-8 text-white">
+                            <path fillRule="evenodd" clipRule="evenodd" d="M22 3H20V21H22V3ZM4.28615 3.61729C3.28674 3.00228 2 3.7213 2 4.89478V19.1052C2 20.2787 3.28674 20.9977 4.28615 20.3827L15.8321 13.2775C16.7839 12.6918 16.7839 11.3082 15.8321 10.7225L4.28615 3.61729ZM4 18.2104V5.78956L14.092 12L4 18.2104Z" />
+                          </svg>
+                        </button>
+
+                        {showNextHover && (
+                          <div className="absolute bottom-full right-0 mb-3 w-[42rem] max-w-[92vw] bg-black/90 rounded-xl ring-1 ring-white/10 overflow-hidden shadow-2xl z-50" role="dialog" aria-label="Next Episode">
+                            <div className="px-6 py-4 text-2xl font-bold text-white bg-white/5">Next Episode</div>
+                            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                              <div className="relative aspect-video bg-black/40 rounded overflow-hidden">
+                                {nextEpisode?.thumb && (
+                                  <img src={apiClient.getPlexImageNoToken(nextEpisode.thumb)} alt={nextEpisode.title} className="absolute inset-0 w-full h-full object-cover" />
+                                )}
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center ring-1 ring-white/20">
+                                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" className="w-10 h-10 text-white">
+                                      <path d="M5 2.69127C5 1.93067 5.81547 1.44851 6.48192 1.81506L23.4069 11.1238C24.0977 11.5037 24.0977 12.4963 23.4069 12.8762L6.48192 22.1849C5.81546 22.5515 5 22.0693 5 21.3087V2.69127Z" />
+                                    </svg>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-white/90">
+                                <div className="text-xl font-semibold mb-1">{nextEpisode?.index ?? ''} <span className="opacity-80 font-normal">Episode {nextEpisode?.index ?? ''}</span></div>
+                                <div className="text-xl font-bold mb-2">{nextEpisode?.title}</div>
+                                <div className="text-white/80 leading-relaxed line-clamp-5">{nextEpisode?.summary}</div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="relative">
+                      <button
+                        ref={episodesButtonRef}
+                        className="p-2 bg-transparent text-white transition-transform duration-150 ease-out hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded"
+                        onClick={() => setShowEpisodes(s => !s)}
+                        aria-label="Episodes"
+                        title="Episodes"
+                      >
+                        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" className="w-8 h-8 text-white">
+                          <path fillRule="evenodd" clipRule="evenodd" d="M8 5H22V13H24V5C24 3.89543 23.1046 3 22 3H8V5ZM18 9H4V7H18C19.1046 7 20 7.89543 20 9V17H18V9ZM0 13C0 11.8954 0.895431 11 2 11H14C15.1046 11 16 11.8954 16 13V19C16 20.1046 15.1046 21 14 21H2C0.895431 21 0 20.1046 0 19V13ZM14 19V13H2V19H14Z" />
+                        </svg>
+                      </button>
+                    </div>
+                  </>
+                )}
                 {/* Settings */}
                 <div className="relative">
                   <button
@@ -1500,6 +1748,54 @@ export default function AdvancedPlayer({ plexConfig, itemId, onBack, onNext }: A
               </div>
             </div>
           </div>
+          
+          {/* Episodes overlay */}
+          {showEpisodes && (
+            <div className="absolute bottom-24 left-0 right-0 z-40 px-6 flex" style={{ justifyContent: 'right' }}>
+              <div ref={episodesPanelRef} className="max-w-2xl bg-black/90 rounded-xl ring-1 ring-white/10 shadow-2xl overflow-hidden">
+                <div className="flex items-center justify-between pl-6 pr-3 py-4 bg-white/10 border-b border-white/10">
+                  <div className="text-2xl font-semibold text-white">Season {metadata?.parentIndex ?? ''}</div>
+                  <button className="px-3 py-1.5 text-sm bg-white/10 hover:bg-white/20 rounded text-white" onClick={() => setShowEpisodes(false)}>Close</button>
+                </div>
+                <div className="max-h-[55vh] overflow-y-auto p-4">
+                  {episodesLoading && (
+                    <div className="text-white/80 p-6">Loading episodes…</div>
+                  )}
+                  {!episodesLoading && (!seasonEpisodes || seasonEpisodes.length === 0) && (
+                    <div className="text-white/70 p-6">No episodes found.</div>
+                  )}
+                  {!episodesLoading && seasonEpisodes && seasonEpisodes.length > 0 && (
+                    <div className="divide-y divide-white/10">
+                      {seasonEpisodes.map((ep) => (
+                        <button
+                          key={ep.ratingKey}
+                          className="w-full text-left flex items-start gap-4 px-2 py-3 hover:bg-white/5 transition-colors"
+                          onClick={() => onNext?.(String(ep.ratingKey))}
+                        >
+                          <div className="w-40 aspect-video bg-black/30 rounded overflow-hidden flex-shrink-0 relative">
+                            {ep.thumb && (
+                              <img src={apiClient.getPlexImageNoToken(ep.thumb)} alt={ep.title} className="w-full h-full object-cover" />
+                            )}
+                            {ep.viewOffset && ep.duration && ep.duration > 0 && (
+                              <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-white/20">
+                                <div className="h-full bg-brand" style={{ width: `${Math.min(100, Math.max(0, Math.round((ep.viewOffset/ep.duration)*100)))}%` }} />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-white font-semibold text-base mb-1">{ep.index ? `${ep.index}  ` : ''}<span className="font-bold">{ep.title}</span></div>
+                            {ep.summary && (
+                              <div className="text-white/80 text-sm leading-relaxed line-clamp-2">{ep.summary}</div>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

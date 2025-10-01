@@ -45,6 +45,8 @@ export default function Details() {
   const [seasonKey, setSeasonKey] = useState<string>('');
   const [episodes, setEpisodes] = useState<any[]>([]);
   const [episodesLoading, setEpisodesLoading] = useState<boolean>(false);
+  const [onDeck, setOnDeck] = useState<any | null>(null);
+  const [showKey, setShowKey] = useState<string | undefined>(undefined);
   const [tech, setTech] = useState<any>({});
   const [versions, setVersions] = useState<Array<{id:string; label:string}>>([]);
   const [activeVersion, setActiveVersion] = useState<string | undefined>(undefined);
@@ -240,6 +242,8 @@ export default function Details() {
             } catch {}
             // Seasons for Plex-native series
             if (m.type === 'show') {
+              setKind('tv');
+              setShowKey(rk);
               try {
                 const ch: any = await plexBackendDir(`/library/metadata/${rk}/children`);
                 const ss = (ch?.MediaContainer?.Metadata||[]).map((x:any)=>({ key:String(x.ratingKey), title:x.title }));
@@ -247,6 +251,25 @@ export default function Details() {
                 if (ss[0]) setSeasonKey(ss[0].key);
                 setActiveTab('EPISODES');
               } catch (e) { console.error(e); }
+
+              // Continue watching (onDeck) for shows
+              try {
+                const od: any = await plexBackendDir(`/library/metadata/${rk}/onDeck`);
+                const ep = od?.MediaContainer?.Metadata?.[0];
+                if (ep) {
+                  setOnDeck({
+                    id: `plex:${ep.ratingKey}`,
+                    title: ep.title,
+                    overview: ep.summary,
+                    image: apiClient.getPlexImageNoToken(ep.thumb || ep.parentThumb || ''),
+                    duration: Math.round((ep.duration||0)/60000),
+                    progress: ep.viewOffset ? Math.round(((ep.viewOffset/1000)/((ep.duration||1)/1000))*100) : 0,
+                    ratingKey: String(ep.ratingKey),
+                  });
+                } else {
+                  setOnDeck(null);
+                }
+              } catch (e) { setOnDeck(null); }
             }
           }
         } else if (id.startsWith('tmdb:')) {
@@ -489,14 +512,20 @@ export default function Details() {
         setEpisodesLoading(true);
         // Prefer Plex episodes if plex seasonKey is numeric (ratingKey), otherwise use TMDB fallback
         if (/^\d+$/.test(seasonKey)) {
-          const ch: any = await plexBackendDir(`/library/metadata/${seasonKey}/children`);
+          const ch: any = await plexBackendDir(`/library/metadata/${seasonKey}/children?nocache=${Date.now()}`);
           const eps = (ch?.MediaContainer?.Metadata||[]).map((e:any)=>({
             id: `plex:${e.ratingKey}`,
             title: e.title,
             overview: e.summary,
             image: apiClient.getPlexImageNoToken((e.thumb || e.parentThumb) || ''),
             duration: Math.round((e.duration||0)/60000),
-            progress: e.viewOffset ? Math.round(((e.viewOffset/1000)/((e.duration||1)/1000))*100) : 0,
+            progress: (() => {
+              const dur = (e.duration||0)/1000; const vo = (e.viewOffset||0)/1000; const vc = e.viewCount||0;
+              if (vc > 0) return 100;
+              if (dur > 0 && vo/dur >= 0.95) return 100;
+              if (dur > 0) return Math.round((vo/dur)*100);
+              return 0;
+            })(),
           }));
           setEpisodes(eps);
         } else if (tmdbCtx?.media==='tv' && tmdbCtx?.id) {
@@ -518,6 +547,50 @@ export default function Details() {
     loadEps();
   }, [seasonKey]);
 
+  // Refresh episodes and onDeck when returning to the tab (progress updates)
+  useEffect(() => {
+    const onVis = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        if (activeTab === 'EPISODES' && seasonKey) {
+          setEpisodesLoading(true);
+          const ch: any = await plexBackendDir(`/library/metadata/${seasonKey}/children?nocache=${Date.now()}`);
+          const eps = (ch?.MediaContainer?.Metadata||[]).map((e:any)=>({
+            id: `plex:${e.ratingKey}`,
+            title: e.title,
+            overview: e.summary,
+            image: apiClient.getPlexImageNoToken((e.thumb || e.parentThumb) || ''),
+            duration: Math.round((e.duration||0)/60000),
+            progress: (() => {
+              const dur = (e.duration||0)/1000; const vo = (e.viewOffset||0)/1000; const vc = e.viewCount||0;
+              if (vc > 0) return 100;
+              if (dur > 0 && vo/dur >= 0.95) return 100;
+              if (dur > 0) return Math.round((vo/dur)*100);
+              return 0;
+            })(),
+          }));
+          setEpisodes(eps);
+          setEpisodesLoading(false);
+        }
+        if (kind === 'tv' && showKey) {
+          const od: any = await plexBackendDir(`/library/metadata/${showKey}/onDeck?nocache=${Date.now()}`);
+          const ep = od?.MediaContainer?.Metadata?.[0];
+          setOnDeck(ep ? {
+            id: `plex:${ep.ratingKey}`,
+            title: ep.title,
+            overview: ep.summary,
+            image: apiClient.getPlexImageNoToken(ep.thumb || ep.parentThumb || ''),
+            duration: Math.round((ep.duration||0)/60000),
+            progress: ep.viewOffset ? Math.round(((ep.viewOffset/1000)/((ep.duration||1)/1000))*100) : 0,
+            ratingKey: String(ep.ratingKey),
+          } : null);
+        }
+      } catch {}
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [activeTab, seasonKey, kind, showKey]);
+
   const tabsData = seasons.length > 0
     ? [
         { id: 'EPISODES', label: 'Episodes', count: episodes.length || undefined },
@@ -532,8 +605,18 @@ export default function Details() {
       ];
   const playSelected = async () => {
     try {
-    // Always go through in-app player
-    // Prefer mapped Plex id when available to ensure real playback instead of sample fallback
+    // For TV series, prefer on-deck episode or first episode
+    if (kind === 'tv') {
+      if (onDeck?.id) {
+        nav(`/player/${encodeURIComponent(onDeck.id)}`);
+        return;
+      }
+      if (episodes && episodes.length > 0) {
+        nav(`/player/${encodeURIComponent(episodes[0].id)}`);
+        return;
+      }
+    }
+    // Otherwise go through in-app player for the item (movie or fallback)
     const targetId = (plexMappedId || id)!;
     const ver = activeVersion ? `?v=${encodeURIComponent(activeVersion)}` : '';
     nav(`/player/${encodeURIComponent(targetId)}${ver}`);
@@ -580,6 +663,12 @@ export default function Details() {
         }}
         playable={id?.startsWith('plex:') || !!plexMappedId}
         onPlay={playSelected}
+        onContinue={(() => {
+          if (kind !== 'tv') return undefined;
+          const cont = onDeck?.id || (episodes.find(e => (e.progress||0) > 0)?.id) || (episodes.find(e => (e.progress||0) < 100)?.id);
+          return cont ? (() => nav(`/player/${encodeURIComponent(cont)}`)) : undefined;
+        })()}
+        continueLabel={kind==='tv' ? 'Continue Watching' : undefined}
         watchlistProps={{
           itemId: id!,
           itemType: (kind==='tv'?'show':'movie') as any,
@@ -598,6 +687,25 @@ export default function Details() {
         onToggleMute={toggleMute}
       />
       </div>
+
+      {/* Continue Watching for TV shows */}
+      {kind === 'tv' && onDeck && (
+        <div className="page-gutter-left mt-4">
+          <div className="bg-white/5 rounded-xl ring-1 ring-white/10 overflow-hidden">
+            <div className="px-4 py-3 text-white/90 font-semibold">Continue watching</div>
+            <div className="px-3 pb-3">
+              <EpisodeItem ep={{
+                id: onDeck.id,
+                title: onDeck.title,
+                overview: onDeck.overview,
+                image: onDeck.image,
+                duration: onDeck.duration,
+                progress: onDeck.progress,
+              }} onClick={(eid)=> nav(`/player/${encodeURIComponent(eid)}`)} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Ratings now inline with metadata row in DetailsHero */}
 
